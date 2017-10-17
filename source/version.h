@@ -1,2 +1,2 @@
-#define GIT_COMMIT_HASH "3e95406df068cfcfc08c9f87fc81829539c65274"
-#define GIT_BRANCH "zeus_py_trunc"
+#define GIT_COMMIT_HASH "a601d6f7fd4b9575b822ca1705a9e5b4ed3a535c"
+#define GIT_BRANCH "master"
