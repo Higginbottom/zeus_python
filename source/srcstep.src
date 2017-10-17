@@ -1,0 +1,120 @@
+#include "zeus2d.def"
+c=======================================================================
+c////////////////////////////  SUBROUTINE SRCSTEP  \\\\\\\\\\\\\\\\\\\\\
+c
+      subroutine srcstep
+c
+c  PURPOSE: Controls the update of velocities (v1,v2,v3) and internal
+c  energy (e) from source terms in the equation of motion and energy
+c  equations respectively.  If MHD is defined, then also updates b3.
+c  If RAD is defined, then also updates radiation veriable er
+c
+c  EXTERNALS: PGAS 
+c             STV1,STV2,STV3B3
+c             VISCUS
+c             ----- either --------
+c             MOMENT              |--> radiation hydrodynamics
+c             ------- or ----------
+c             PDV                 |--> explicit energy update
+c             ---------------------
+c             BVALE
+c             BVALV1,BVALV2,BVALV3
+c
+c  LOCALS:
+c  st = source terms for v1 in i sweep
+c                        v2 in j sweep
+c-----------------------------------------------------------------------
+      implicit NONE
+#include "param.h"
+#include "grid.h"
+#include "field.h"
+#include "root.h"
+#include "scratch.h"
+      integer i,j
+      REAL    st(ijn)
+      equivalence  (st,wij0)
+c
+      external pgas,stv1,stv2,bvalv1,bvalv2, VISCOSITY ,bvale
+#ifdef MHD
+#ifdef ROTATE
+      external stv3b3
+#endif
+#endif
+#ifdef RAD
+      external fld,gradv,moment
+#else
+      external pdv
+#endif
+c\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\//////////////////////////////////////
+c=======================================================================
+c
+      call pgas
+#ifdef RAD
+      call fld
+#endif
+c
+c  Perform an explicit update for velocities. 
+c  Note that the order of updating of variables is important, and must
+c  be: v1,v2,v3,b3 for stability
+c
+      if (nx1z .gt. 1) then
+      do 110 j=js,je
+        call stv1(j,st)
+        do 100 i=iip1(j),io(j)
+c	if (j.eq.40) print *,i,v1(i,j) ,dt*st(i),v3(i,j)
+          v1(i,j) = v1(i,j) + dt*st(i)
+100     continue
+110   continue
+      endif
+      call bvalv1
+c
+      if (nx2z .gt. 1) then
+      do 130 i=is,ie
+        call stv2(i,st)
+        do 120 j=jip1(i),jo(i)
+c	if (i.eq.140) print *,j,v2(i,j) ,dt*st(j),v3(i,j),'j'
+          v2(i,j) = v2(i,j) + dt*st(j)
+120     continue
+130   continue
+      endif
+      call bvalv2
+c
+c  Explicit update of v3 and b3 (only when MHD and ROTATE are defined)
+c
+#ifdef MHD
+#ifdef ROTATE
+      call stv3b3
+#endif
+#endif
+c-----------------------------------------------------------------------
+c  Now update momenta and energy due to artificial viscosity source
+c  terms (only a von Neumann-Richtmyer treatment is available with this
+c  release)
+c	
+c	print *,"before VISCOSITY ",v2(4,98)
+
+      call VISCOSITY
+      call bvale
+      call bvalv1
+c	print *,"before bvalv2 ",v2(4,98)
+	  
+      call bvalv2
+c
+c  Finally, update energy with pdv source term. 
+c  In PDV, a predictor-corrector method is used to solve
+c                    de/dt = P(e)*DIV(v)
+c  If RAD is defined (radiation hydrodynamics), then we add the
+c  source terms in the energy eqn when we update the radiation moment
+c  equations in module MOMENT. 
+c
+#ifdef RAD
+      call gradv
+      call moment
+#else
+c		print *,"before pdv ",v2(4,98)
+
+      call pdv
+      call bvale
+#endif
+      return
+      end

@@ -1,0 +1,164 @@
+#include "zeus2d.def"
+c=======================================================================
+c/////////////////////////  SUBROUTINE STV3B3  \\\\\\\\\\\\\\\\\\\\\\\\\
+c
+      subroutine stv3b3
+#ifdef MHD
+#ifdef ROTATE
+c
+c  PURPOSE: Updates v3 and b3 due to source terms using upwind
+c  differencing along characteristics.  
+c
+c  EXTERNALS: X1INTZC, X2INTZC, BVALV3, BVALB3
+c
+c  LOCALS:
+c-----------------------------------------------------------------------
+      implicit NONE
+#include "param.h"
+#include "grid.h"
+#include "field.h"
+#include "bndry.h"
+#include "root.h"
+#include "scratch.h"
+      integer i,j
+      REAL vm(ijn),vp(ijn),v3m(ijn),b3m(ijn),v3p(ijn),b3p(ijn)
+     &    ,b3star(ijn),v3star(ijn),tv3(ijn),tb3(ijn),p1(ijn)
+      REAL sgn,sdp,sdm,bx
+      equivalence (vm ,wij0),(vp ,wij1),(v3m   ,wij2),(b3m   ,wij3)
+     &           ,(v3p,wij4),(b3p,wij5),(b3star,wij6),(v3star,wij7)
+     &           ,(tv3,wij8),(tb3,wij9)
+c
+      external x1intzc,x2intzc,bvalv3,bvalb3
+c\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\//////////////////////////////////
+c=======================================================================
+c  Interpolate v3 and b3 along characteristics in 1-direction
+c
+      do 50 j=js,je
+        do 10 i=ii(j),iop1(j)
+          vp(i) =  abs(b1(i,j))/sqrt(d(i-1,j))
+          vm(i) = -abs(b1(i,j))/sqrt(d(i  ,j))
+10      continue
+        do 20 i=iim2(j),iop2(j)
+          tv3(i) = v3(i,j)
+          tb3(i) = b3(i,j)
+          p1 (i) = 0.0
+20      continue
+        call x1intzc(tv3,vm,p1,j,iords3,istps3,v3m)
+        call x1intzc(tb3,vm,p1,j,iordb3,istpb3,b3m)
+        call x1intzc(tv3,vp,p1,j,iords3,istps3,v3p)
+        call x1intzc(tb3,vp,p1,j,iordb3,istpb3,b3p)
+	if (b3iib(j) .eq. 1 .or. b3iib(j) .eq. 2) then
+          v3m(ii  (j)) = v3p(ii  (j))
+          b3m(ii  (j)) = b3p(ii  (j))
+	endif
+	if (b3iib(j) .eq. -1) then
+          v3m(ii  (j)) = -v3p(ii  (j))
+          b3m(ii  (j)) = -b3p(ii  (j))
+	endif
+	if (b3iib(j) .eq. 4) then
+          v3m(ii  (j)) = v3p(iop1(j))
+          b3m(ii  (j)) = b3p(iop1(j))
+	endif
+	if (b3iib(j) .eq. 5) then
+          v3m(ii  (j)) =  v3p(ii  (j))
+          b3m(ii  (j)) = -b3p(ii  (j))
+	endif
+c
+	if (b3oib(j) .eq. 1 .or. b3oib(j) .eq. 2) then
+          v3p(iop1(j)) = v3m(iop1(j))
+          b3p(iop1(j)) = b3m(iop1(j))
+	endif
+	if (b3oib(j) .eq. -1) then
+          v3p(iop1(j)) = -v3m(iop1(j))
+          b3p(iop1(j)) = -b3m(iop1(j))
+	endif
+	if (b3oib(j) .eq. 4) then
+          v3p(iop1(j)) = v3m(ii(j))
+          b3p(iop1(j)) = b3m(ii(j))
+	endif
+	if (b3oib(j) .eq. 5) then
+          v3p(iop1(j)) =  v3m(iop1(j))
+          b3p(iop1(j)) = -b3m(iop1(j))
+	endif
+c
+c  interface values using Riemann invariants along characteristics
+c  trap needed at r=0 in RT geometry
+c
+        do 30 i=ii(j),iop1(j)
+          sgn = sign(1.0,b1(i,j))
+          sdm = sqrt(d(i  ,j))
+          sdp = sqrt(d(i-1,j))
+          b3star(i) = sgn*(b3m(i)/sdm + b3p(i)/sdp) + (v3m(i)-v3p(i))
+          b3star(i) = sgn*b3star(i)/(1.0/sdp + 1.0/sdm)
+          v3star(i) = .5*(v3m(i)+v3p(i))+.5*sgn*(b3m(i)/sdm-b3p(i)/sdp)
+          v3star(i) = v3star(i) + 0.5*sgn*(1.0/sdp - 1.0/sdm)*b3star(i)
+30      continue
+c
+c  difference interface values to update v3 and b3
+c
+        do 40 i=ii(j),io(j)
+          bx = 0.5*(b1(i,j)+b1(i+1,j))*dt
+          v3(i,j) = v3(i,j) + bx/d(i,j)*
+     &       (g31a(i+1)*b3star(i+1)-g31a(i)*b3star(i))/(g31b(i)*dx1a(i))
+          b3(i,j) = b3(i,j) + bx*(v3star(i+1)-v3star(i))/dx1a(i)
+     &      - bx*0.5*(v3star(i)+v3star(i+1))*dg31bd1(i)/g31b(i)
+40      continue
+50    continue
+      call bvalv3
+      call bvalb3
+c
+c  propogate in 2-direction
+c  Interpolate v3 and b3 along characteristics in 2-direction
+c
+      do 100 i=is,ie
+        do 60 j=ji(i),jop1(i)
+          vp(j) =  abs(b2(i,j))/sqrt(d(i,j-1))
+          vm(j) = -abs(b2(i,j))/sqrt(d(i,j  ))
+60      continue
+        do 70 j=jim2(i),jop2(i)
+          tv3(j) = v3(i,j)
+          tb3(j) = b3(i,j)
+          p1 (j) = 0.0
+70      continue
+        call x2intzc(tv3,vm,p1,i,g2b,iords3,istps3,v3m)
+        call x2intzc(tb3,vm,p1,i,g2b,iordb3,istpb3,b3m)
+        call x2intzc(tv3,vp,p1,i,g2b,iords3,istps3,v3p)
+        call x2intzc(tb3,vp,p1,i,g2b,iordb3,istpb3,b3p)
+	if (b3ijb(i) .eq. 1) then
+          v3m(ji  (i)) = -v3p(ji  (i))
+          b3m(ji  (i)) = -b3p(ji  (i))
+	endif
+	if (b3ojb(i) .eq. 1) then
+          v3p(jop1(i)) = v3m(jop1(i))
+          b3p(jop1(i)) = -b3m(jop1(i))
+	endif
+c
+c  interface values using Riemann invariants along characteristics
+c  traps needed at r=0 in RZ geometry and theta=0 or pi in RT geometry
+c
+        do 80 j=ji(i),jop1(i)
+          sgn = sign(1.0,b2(i,j))
+          sdm = sqrt(d(i,j  ))
+          sdp = sqrt(d(i,j-1))
+          b3star(j) = sgn*(b3m(j)/sdm + b3p(j)/sdp) + (v3m(j)-v3p(j))
+          b3star(j) = sgn*b3star(j)/(1.0/sdp + 1.0/sdm)
+          v3star(j) = .5*(v3m(j)+v3p(j))+.5*sgn*(b3m(j)/sdm-b3p(j)/sdp)
+          v3star(j) = v3star(j) + 0.5*sgn*(1.0/sdp - 1.0/sdm)*b3star(j)
+80      continue
+c
+c  difference interface values to update v3 and b3
+c
+        do 90 j=ji(i),jo(i)
+          bx = 0.5*(b2(i,j)+b2(i,j+1))*dt
+          v3(i,j) = v3(i,j) + bx/d(i,j)*
+     &      (g32a(j+1)*b3star(j+1)-g32a(j)*b3star(j))/(g2b(i)*dvl2a(j))
+          b3(i,j) = b3(i,j)+ bx*(v3star(j+1)-v3star(j))/(g2b(i)*dx2a(j))
+     &     - bx*0.5*(v3star(j)+v3star(j+1))*dg32bd2(j)/(g2b(i)*g32b(j))
+90      continue
+100   continue
+      call bvalv3
+      call bvalb3
+#endif
+#endif
+      return
+      end

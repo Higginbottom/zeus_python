@@ -1,0 +1,170 @@
+#include "zeus2d.def"
+c=======================================================================
+c///////////////////////////  SUBROUTINE VISCUS  \\\\\\\\\\\\\\\\\\\\\\\
+c
+      subroutine viscus
+c
+c  PURPOSE: Computes the artificial viscosity source terms in the
+c  momentum and energy equations, ie computes
+c               dv/dt = -DIV(Q)/rho               for v1 and v2
+c      and      de/dt = -Q*delta(v)/delta(x)
+c  This routine uses the von Neumann-Richtmyer form of the artificial
+c  viscosity.  This means that geometric terms are not included in 
+c  DIV(Q).   In addition, a linear viscosity can be added (controlled
+c  by the value of qlin) to damp oscillations in stagnant flow.
+c
+c  EXTERNALS: [none]
+c
+c  LOCALS:
+c  dv      = delta(v1) or delta(v2)
+c  dv1dx1  = delta(v1)/delta(x1)
+c  dv2dx2  = delta(v2)/delta(x2)
+c  dv1dx1m = minimum dv1dx1
+c  dv2dx2m = minimum dv2dx2
+c-----------------------------------------------------------------------
+      implicit NONE
+#include "param.h"
+#include "grid.h"
+#include "field.h"
+#include "bndry.h"
+#include "root.h"
+#include "scratch.h"
+      integer i,j,imin,jmin
+      REAL    rhoi,dvdx,dvel,eold
+     &, qa     (in) , qb     (jn) , dvel1  (in) , dvel2  (jn)
+     &, dv1dx1 (in) , dv2dx2 (jn) , q11    (in) , q22    (jn)
+     &, dv1dx1m(jn) , dv2dx2m(in)
+      equivalence
+     &  (dvel1  ,wi1) , (dvel2  ,wj1) , (dv1dx1 ,wi2) , (dv2dx2 ,wj2)
+     &, (q11    ,wi3) , (q22    ,wj3) , (dv2dx2m,wi4) , (dv1dx1m,wj4)
+     &, (qa     ,wi5) , (qb     ,wj5)
+c
+      integer ismin
+      external ismin
+c\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\/////////////////////////////////////
+c=======================================================================
+c  Start von Neumann-Richtmyer artificial viscosity update.  Begin with
+c  v1 (i sweeps)
+c
+      if (qcon .eq. 0.0) goto 100
+      if (nx1z .gt. 1) then
+        do 20 j=js,je
+          dvel1 (ii(j)) = v1(iip1(j),j) - v1(ii(j),j)
+          if (dvel1(ii(j)) .gt. 0.0) dvel1(ii(j)) = 0.0
+          dv1dx1(ii(j)) = dvel1(ii(j))*dx1ai(ii(j))
+          q11   (ii(j)) = dt*d(ii(j),j)*qcon*dvel1(ii(j))**2
+          eold       = e(ii(j),j)
+          e(ii(j),j) = e(ii(j),j) - dv1dx1(ii(j))*q11(ii(j))
+          do 10 i=iip1(j),io(j)
+            dvel1(i) = v1(i+1,j) - v1(i,j)
+            if (dvel1(i) .gt. 0.0) dvel1(i) = 0.0
+            dv1dx1 (i) = dvel1(i)*dx1ai(i)
+            q11    (i) = dt*d(i,j)*qcon*dvel1(i)**2
+            rhoi = 2.0/(d(i-1,j) + d(i,j))
+c
+            v1(i,j) = v1(i,j) - rhoi*(q11(i) - q11(i-1))*dx1bi(i)
+            eold    = e (i,j)
+            e (i,j) = e (i,j) - dv1dx1(i)*q11(i)
+10        continue
+          imin = ismin(nx1(j),dv1dx1(ii(j)),1) + iim1(j)
+          dv1dx1m(j) = dv1dx1(imin)
+20      continue
+      else
+        dv1dx1m(js) = 0.0
+      endif
+c
+c  Now do v2 (j sweeps) except for 1-D problems
+c
+c	print *,"test1 ",v2(4,98)
+
+      if (nx2z .gt. 1) then
+        do 40 i=is,ie
+          dvel2(ji(i)) =  v2(i,jip1(i)) - v2(i,ji(i))
+          if (dvel2(ji(i)) .gt. 0.0) dvel2(ji(i)) = 0.0
+          dv2dx2 (ji(i)) = dvel2(ji(i))*dx2ai(ji(i))/g2b(i)
+          q22    (ji(i)) = dt*d(i,ji(i))*qcon*dvel2(ji(i))**2 
+          eold       = e(i,ji(i))
+          e(i,ji(i)) = e(i,ji(i)) - dv2dx2(ji(i))*q22(ji(i))
+          do 30 j=jip1(i),jo(i)
+            dvel2(j) = v2(i,j+1) - v2(i,j)
+            if (dvel2(j) .gt. 0.0) dvel2(j) = 0.0
+            dv2dx2 (j) = dvel2(j)*dx2ai(j)/g2b(i)
+            q22    (j) = dt*d(i,j)*qcon*dvel2(j)**2
+c	if (i.eq.4 .and. j.eq.98) then
+c		 print *,"TEST0 ",q22(j),dt,d(i,j),qcon,dvel2(j),
+c    +v2(i,jip1(i)),v2(i,ji(i))
+c	endif	
+			
+			
+            rhoi =  2.0/(d(i,j-1) + d(i,j))
+c
+c	if (i.eq.4 .and. j.eq.98) then
+c  	  print *,"TEST1 ",v2(i,j),rhoi,q22(j),q22(j-1),dx2bi(j),g2b(i)
+c	endif
+            v2(i,j) = v2(i,j) - rhoi*(q22(j) - q22(j-1))*dx2bi(j)/g2b(i)
+c		  if (i.eq.4 .and. j.eq.98) then
+c			  print *,"TEST2 ",v2(i,j),rhoi,q22(j),q22(j-1),dx2bi(j),g2b(i)
+c		  endif
+            eold    = e (i,j)
+            e (i,j) = e (i,j) - dv2dx2(j)*q22(j)
+30        continue
+          jmin = ismin(nx2(i),dv2dx2(ji(i)),1) + jim1(i)
+          dv2dx2m(i) = dv2dx2(jmin)
+40      continue
+      else
+        dv2dx2m(is) = 0.0
+      endif
+	  
+c	print *,"test2 ",v2(4,98)
+	  
+c
+c  viscus timestep.  Note we find the minimum dv/dx since it is < 0 ;
+c  thus minimum dv/dx gives maximum absolute value.
+c
+      jmin = ismin (nx2z,dv1dx1m(js),1) + js - 1
+      imin = ismin (nx1z,dv2dx2m(is),1) + is - 1
+      dvdx   = abs(   min(dv1dx1m(jmin),dv2dx2m(imin)) )
+      dtqqi2 = (4.0*qcon*dvdx)**2
+c
+c  Add linear artificial viscosity (if necessary) to smooth stagnant
+c  flows (mostly used for test problems).
+c
+100   continue
+      if (qlin .eq. 0.0) return
+c
+      if (nx1z .gt. 1) then
+      do 120 j=js,je
+        dvel = v1(iip1(j),j) - v1(ii(j),j)
+        qa(ii(j)) = -dt*d(ii(j),j)*dvel*qlin*sqrt(e(ii(j),j)/d(ii(j),j))
+        eold       = e(ii(j),j)
+        e(ii(j),j) = e(ii(j),j) - dvel*dx1ai(ii(j))*qa(ii(j))
+        do 110 i=iip1(j),io(j)
+          dvel = v1(i+1,j) - v1(i,j)
+          qa(i) = -dt*d(i,j)*dvel*qlin*sqrt(e(i,j)/d(i,j))
+          rhoi = 2.0/(d(i-1,j) + d(i,j))
+          v1(i,j) = v1(i,j) - rhoi*(qa(i) - qa(i-1))*dx1bi(i)
+          eold    = e (i,j)
+          e (i,j) = e (i,j) - dvel*dx1ai(i)*qa(i)
+110     continue
+120   continue
+      endif
+c
+      if (nx2z .gt. 1) then
+      do 140 i=is,ie
+        dvel = v2(i,jip1(i)) - v2(i,ji(i))
+        qb(ji(i)) = -dt*d(i,ji(i))*dvel*qlin*sqrt(e(i,ji(i))/d(i,ji(i)))
+        eold      = e (i,ji(i))
+        e(i,ji(i)) = e(i,ji(i)) - dvel/(g2b(i)*dx2a(ji(i)))*qb(ji(i))
+        do 130 j=jip1(i),jo(i)
+          dvel = v2(i,j+1) - v2(i,j)
+          qb(j) = -dt*d(i,j)*dvel*qlin*sqrt(e(i,j)/d(i,j))
+          rhoi =  2.0/(d(i,j-1) + d(i,j))
+          v2(i,j) = v2(i,j) - rhoi*(qb(j) - qb(j-1))/(g2b(i)*dx2b(j))
+          eold    = e (i,j)
+          e (i,j) = e (i,j) - dvel/(g2b(i)*dx2a(j))*qb(j)
+130     continue
+140   continue
+      endif
+c
+      return
+      end

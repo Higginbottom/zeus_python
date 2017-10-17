@@ -1,0 +1,71 @@
+#include "zeus2d.def"
+c=======================================================================
+c///////////////////////////  SUBROUTINE DERIVS  \\\\\\\\\\\\\\\\\\\\\\\
+c
+      subroutine derivs(dfn1de,dfn1der,dfn2de,dfn2der)
+#ifdef RAD
+c
+c  PURPOSE:  Computes the derivatives of the moment eqns with respect
+c  to (wrt) the material energy density (e) and the radiation energy
+c  density (er) at the advanced time level.
+c
+c  INPUT ARGUMENTS:[none]
+c
+c  OUTPUT ARGUMENTS:
+c   dfn1de,dfn1der = derivatives of the "fn1" moment equation (radiation
+c    energy eqn) wrt material energy and radiation energy density (e,er) 
+c   dfn2de,dfn2der = derivatives of the "fn2" moment equation (gas
+c    energy eqn) wrt material energy and radiation energy density (e,er) 
+c
+c  EXTERNALS: [none]
+c
+c  LOCALS:
+c-----------------------------------------------------------------------
+      implicit NONE
+#include "param.h"
+#include "grid.h"
+#include "field.h"
+#include "root.h"
+#include "radiation.h"
+      REAL   dfn1de(in,jn),dfn2de(in,jn),dfn1der(in,jn),dfn2der(in,jn)
+      integer i,j
+      REAL qa
+c=======================================================================
+c  INLINE FUNCTIONS
+c   TH BAR: time centers a variable according to the value of radth
+c=======================================================================
+      REAL thbar,xn,xnp1
+      th bar(xn,xnp1) = radth*xnp1 + (1.0-radth)*xn
+c\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\///////////////////////////////
+c=======================================================================
+c  Compute of derivatives of moment eqns (fn1,fn2) wrt
+c  material internal energy density (e).
+c
+      do 20 j=js,je
+        do 10 i=ii(j),io(j)
+	  qa = 4.0*pi*radth*dkapde(i,j)*thbar(bb(i,j),bbn(i,j))
+     &      +  4.0*pi*radth*thbar(kap(i,j),kapn(i,j))*dbbde(i,j)
+     &      - c*radth*dkapde(i,j)*thbar(er(i,j),ern(i,j))
+          dfn1de(i,j) = -dt*qa
+          dfn2de(i,j) = 1.0 + dt*(qa+radth*dpde(i,j)*divv(i,j))
+10      continue
+20    continue
+c
+c  Compute derivatives of moment eqns(fn1,f2) wrt radiation
+c  internal energy density (er).
+c  Note the derivative of GRAD(v) wrt er term is included in dfn1der,
+c  but the derivative of DIV(F) term wrt er is added in RICCG
+c
+      do 40 j=js,je
+        do 30 i=ii(j),io(j)
+          qa = c*thbar(kap(i,j),kapn(i,j))
+          dfn1der(i,j) = 1.0 + dt*(qa
+     &      + radth*(dv11(i,j)*f11(i,j) + dv22(i,j)*f22(i,j)
+     &      + dv33(i,j)*(1.0-f11(i,j)-f22(i,j))
+     &      + (dv12(i,j) + dv21(i,j))*f12(i,j)))
+          dfn2der(i,j) = -dt*qa
+30      continue
+40    continue
+#endif
+      return
+      end

@@ -1,0 +1,95 @@
+#include "zeus2d.def"
+c=======================================================================
+c////////////////////////  SUBROUTINE NEWGRID  \\\\\\\\\\\\\\\\\\\\\\\\\
+c
+      subroutine newgrid
+c
+c  PURPOSE: Controls grid motion by computing grid velocities and "new"
+c  grid variables (variables at advanced time, to be used in TRANSPRT).
+c
+c  EXTERNALS: NEWVG
+c             NEWX1
+c             NEWX2
+c
+c  LOCALS:
+c-----------------------------------------------------------------------
+      implicit NONE
+#include "param.h"
+#include "grid.h"
+#include "root.h"
+      integer i,j
+      external newvg,scopy,newx1,newx2
+c\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\///////////////////////////////////
+c=======================================================================
+c  return if there is no grid motion in either direction
+c
+      if ((x1fac .eq. 0.0) .and. (x2fac .eq. 0.0)) return
+c
+c  update grid velocities
+c
+      call newvg
+c
+c  update "X1" grid
+c
+      if (x1fac .ne. 0.0) then
+        call scopy (in,  x1a n ,1,  x1a ,1)
+        call scopy (in,  x1b n ,1,  x1b ,1)
+        call scopy (in, dx1a n ,1, dx1a ,1)
+        call scopy (in, dx1b n ,1, dx1b ,1)
+        call scopy (in, g2 a n ,1, g2 a ,1)
+        call scopy (in, g2 b n ,1, g2 b ,1)
+        call scopy (in, g31a n ,1, g31a ,1)
+        call scopy (in, g31b n ,1, g31b ,1)
+        call scopy (in,dvl1a n ,1,dvl1a ,1)
+        call scopy (in,dvl1b n ,1,dvl1b ,1)
+        do 10 i=is-2,ie+2
+          dx1ai(i) = 1.0/dx1a(i)
+          dx1bi(i) = 1.0/dx1b(i)
+#ifdef RT
+#ifdef GRAV
+cRAF
+cRAF Compute 1/r for multipole expansion terms in the gravity module.
+cRAF
+cRAF ****************************************************************
+cRAF * IT IS ASSUMED THAT 1/r DOES NOT VANISH ON ANY BOUNDARY ALONG *
+cRAF * WHICH THE POTENTIAL IS TO BE FOUND USING THE MULTIPOLE       *
+cRAF * EXPANSION!!                                                  *
+cRAF ****************************************************************
+cRAF
+          if ( x1b(i) .ne. 0.0 ) then
+            x1bi(i) = 1.0 / x1b(i)
+          else
+            x1bi(i) = 0.0
+          endif
+#endif
+#endif
+10      continue
+        call newx1
+      end if
+c
+c  update "X2" grid 
+c
+      if (x2fac .ne. 0.0) then
+        call scopy (jn,  x2a n ,1,  x2a ,1)
+        call scopy (jn,  x2b n ,1,  x2b ,1)
+        call scopy (jn, dx2a n ,1, dx2a ,1)
+        call scopy (jn, dx2b n ,1, dx2b ,1)
+        call scopy (jn, g32a n ,1, g32a ,1)
+        call scopy (jn, g32b n ,1, g32b ,1)
+        call scopy (jn, g4 a n ,1, g4 a ,1)
+        call scopy (jn, g4 b n ,1, g4 b ,1)
+        call scopy (jn,dvl2a n ,1,dvl2a ,1)
+        call scopy (jn,dvl2b n ,1,dvl2b ,1)
+        do 20 j=js-2,je+2
+          dx2ai(j) = 1.0/dx2a(j)
+          dx2bi(j) = 1.0/dx2b(j)
+#ifdef RT
+          dg32ad2(j) = cos(x2a(j))
+          dg32bd2(j) = cos(x2b(j))
+#endif
+20      continue
+        call newx2
+      end if
+c
+      return
+      end

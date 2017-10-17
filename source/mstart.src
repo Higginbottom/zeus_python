@@ -1,0 +1,136 @@
+#include "zeus2d.def"
+c=======================================================================
+c/////////////////////////////  SUBROUTINE MSTART  \\\\\\\\\\\\\\\\\\\\\
+c
+      subroutine mstart
+c
+c  PURPOSE:  Starts a run.
+c
+c  EXTERNALS: SETUP, MGET, RESTART
+c
+c  LOCALS:
+c-----------------------------------------------------------------------
+      implicit NONE
+#include "root.h"
+#include "control.h"
+#include "param.h"
+#include "grid.h"
+#include "field.h"
+
+
+c      integer irestart
+c
+      integer incr,strtoi,i,j
+      external setup, mget, restart, strtoi
+      namelist /rescon/ irestart,tdump,dtdump,id,resfile
+      namelist /py_hydro/ den_tol,nden,hc_lim
+      namelist /iocon/ thdf,dthdf,thist,dthist,tusr,dtusr
+	  
+	  
+	  
+	  
+	  
+c\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\///////////////////////////////
+c=======================================================================
+c
+      open(unit=1,file='z2dinput',status='old')
+      open(unit=2,file='zeuslp'  ,status='unknown')
+c
+c------------------------  RESTART CONTROL  ----------------------------
+c
+c  irestart: set to one for calculation restarted from restart dump
+c  tdump: time of last restart dump
+c  dtdump: time between restart dumps
+c  id: character*2 tag attended to filenames to identify run
+c  resfile: name of restart file to restart from
+c
+      irestart = 0
+       tdump = 0.0
+      dtdump = 0.0
+	  call_py = 0.0
+      id     = 'aa'
+      resfile= 'res00000aa'
+      read (1,rescon)
+      write(2,rescon)
+      
+      
+#ifdef PYHYDRO	  
+      	  read (1,py_hydro)
+      	  write(2,py_hydro)
+#endif
+      		print *,"python_controls input",den_tol,nden,hc_lim
+      
+c
+      if (irestart .eq. 0) then
+        call setup
+      else
+        call mget(resfile)
+
+        nwarn = 0
+        ifsen = 0
+        call restart
+      endif
+C D. Proga , 17, Sept. 2002
+      tdump=0. 
+	  
+	  
+c  A quick loop to store the initial density conditions - used in py_hydro mode to see 
+c  if the heating and cooling rates are still likely to be realistic	
+#ifdef PYHYDRO  
+      do 40 j=js,je
+        do 30 i=ii(j),io(j)	  
+	  d_init(i,j)=d(i,j)
+c	  xi0=(lx/((d(i,j)/(mp*1.43))*x1b(i)**2))
+	  
+	  
+	  
+30      continue
+40		continue
+
+#endif
+C
+
+c
+c------------------------  I/O CONTROL ---------------------------------
+c
+c  thdf: time of last HDF dump
+c  dthdf: time between HDF dumps
+c  thist: time of last history dump
+c  dthist: time between history dumps
+c  tusr: time of last user dump
+c  dtusr: time between user dumps
+c
+      if (irestart .eq. 0) then
+         thdf  = 0.0
+        dthdf  = 0.0
+         thist = 0.0
+        dthist = 0.0
+         tusr  = 0.0
+        dtusr  = 0.0
+      endif
+      read (1,iocon)
+      write(2,iocon)
+c
+      if (irestart .eq. 0) then
+        write(resfile,"(a3,i6.6,a8)") 'res',0,id
+        write(hdffile,"(a3,i6.6,a8)") 'hdf',0,id
+        write(hstfile,"(a3,i6.6,a8)") 'hst',0,id
+        write(usrfile,"(a3,i6.6,a8)") 'usr',0,id
+      else
+        incr = strtoi(resfile,4,9) + 1
+        write(resfile,"(a3,i6.6,a8)") 'res',incr,id
+        incr = strtoi(hdffile,4,9) + 1
+        write(hdffile,"(a3,i6.6,a8)") 'hdf',incr,id
+        incr = strtoi(hstfile,4,9) + 1
+        write(hstfile,"(a3,i6.6,a8)") 'hst',incr,id
+        incr = strtoi(usrfile,4,9) + 1
+        write(usrfile,"(a3,i6.6,a8)") 'usr',incr,id
+      endif
+c
+c  Close unit=1 (input deck).  Unit=2 (zeuslp) is kept open throughout
+c  entire run to accept warning messages.  It is closed in zeus2d.src
+c
+      close(unit=1)
+c
+      return
+      end

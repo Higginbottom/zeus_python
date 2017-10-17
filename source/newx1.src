@@ -1,0 +1,131 @@
+#include "zeus2d.def"
+c=======================================================================
+c/////////////////////////  SUBROUTINE NEWX1  \\\\\\\\\\\\\\\\\\\\\\\\\\
+c
+      subroutine newx1
+c
+c  PURPOSE: Computes "new" x1 grid variables (grid variables at advanced
+c  timestep) to be used in TRANSPRT.  Grid values are calculated for
+c  i=is-2 to ie+2, except for dvl1a (i=is,ie+2) and dvl1b (i=is+1,ie+2).
+c  Note similarity of the expressions used to those in the grid
+c  generator routine GRIDI.
+c
+c  EXTERNALS: [none]
+c
+c  LOCALS:
+c   vol1an,vol1bn = volume factors used to compute dvl1*n
+c-----------------------------------------------------------------------
+      implicit NONE
+#include "param.h"
+#include "grid.h"
+#include "root.h"
+#include "scratch.h"
+      integer i
+      REAL    vol1an(in) ,  vol1bn(in), qa,qb,qc,qd
+      equivalence  (vol1an,wi0)  , (vol1bn,wi1)
+c\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\///////////////////////////////////
+c=======================================================================
+      x1an(is-2) = x1a(is-2) + vg1(is-2)*dt
+      do 10 i=is-1,ie+2
+         x1an(i  ) = x1a (i) + vg1(i)*dt
+        dx1an(i-1) = x1an(i) - x1an(i-1)
+10    continue
+      dx1an(ie+2) = (dx1an(ie+1)/dx1an(ie)) * dx1an(ie+1)
+c
+      dx1bn(is-2) = dx1an(is-2)
+       x1bn(is-2) =  x1an(is-1) - 0.5*dx1an(is-2)
+      do 20 i=is-1,ie+2
+         x1bn(i) = x1an(i) + 0.5*dx1an(i)
+        dx1bn(i) = x1bn(i) - x1bn(i-1)
+20    continue
+c
+      do 30 i=is-2,ie+2
+#ifdef XY
+        g2 a h (i) = 1.0
+        g2 b h (i) = 1.0
+        g31a h (i) = 1.0
+        g31b h (i) = 1.0
+        g2 a n (i) = 1.0
+        g2 b n (i) = 1.0
+        g31a n (i) = 1.0
+        g31b n (i) = 1.0
+#endif
+#ifdef RZ
+        g2 a h (i) = 1.0
+        g2 b h (i) = 1.0
+        g31a h (i) = 1.0
+        g31b h (i) = 1.0
+        g2 a n (i) = 1.0
+        g2 b n (i) = 1.0
+        g31a n (i) = 1.0
+        g31b n (i) = 1.0
+#endif
+#ifdef RT
+        g2 a h (i) = 0.5*(x1a(i) + x1an(i))
+        g2 b h (i) = 0.5*(x1b(i) + x1bn(i))
+        g31a h (i) = 0.5*(x1a(i) + x1an(i))
+        g31b h (i) = 0.5*(x1b(i) + x1bn(i))
+        g2 a n (i) = x1a n (i)
+        g2 b n (i) = x1b n (i)
+        g31a n (i) = x1a n (i)
+        g31b n (i) = x1b n (i)
+#endif
+30    continue
+c
+c  New volume factors
+c
+      vol1an(is-2) = g2an(is-2)*g31an(is-2)*x1an(is-2)
+      do 40 i=is-2,ie+1
+        vol1an(i+1) = g2an(i+1)*g31an(i+1)*x1an(i+1)
+        dvl1an(i  ) = vfac*(vol1an(i+1) - vol1an(i))
+40    continue
+c
+      vol1bn(is-2) = g2bn(is-2)*g31bn(is-2)*x1bn(is-2)
+      do 50 i=is-2,ie+1
+        vol1bn(i+1) = g2bn(i+1)*g31bn(i+1)*x1bn(i+1)
+        dvl1bn(i+1) = vfac*(vol1bn(i+1) - vol1bn(i))
+50    continue
+c
+c  New PPA coefficients
+c
+      do 60 i=is,ie+1
+        qa = dx1b(i+1) + dx1b(i)
+        qb = 1.0/(dx1b(i-1) + qa)
+        ppafc1(1,i) = qb/(dx1b(i+1) + dx1b(i))
+        ppafc1(2,i) = qb/(dx1b(i-1) + dx1b(i))
+        ppafc1(3,i) = (2.0*dx1b(i-1)+dx1b(i))*dx1b(i)*ppafc1(1,i)
+        ppafc1(4,i) = (2.0*dx1b(i+1)+dx1b(i))*dx1b(i)*ppafc1(2,i)
+60    continue
+      do 70 i=is,ie
+        qa = dx1b(i+1) + dx1b(i)
+        qc = dx1b(i-1) + dx1b(i+2) + qa
+        ppafc1(5,i) = dx1b(i  )/qa
+        ppafc1(6,i) = dx1b(i+1)/qa
+        ppafc1(8,i) = dx1b(i  )*(dx1b(i  )+dx1b(i-1))
+     &                 /((2.0*dx1b(i)+dx1b(i+1))*qc)
+        ppafc1(7,i) = dx1b(i+1)*(dx1b(i+1)+dx1b(i+2))
+     &                 /((2.0*dx1b(i+1)+dx1b(i))*qc)
+        ppafc1(7,i) = 2.0/qa*(dx1b(i+1)*ppafc1(8,i)-dx1b(i)*ppafc1(7,i))
+70    continue
+      do 80 i=is-1,ie+1
+        qa = dx1a(i-1) + dx1a(i)
+        qb = 1.0/(dx1a(i+1) + qa)
+        ppazc1(1,i) = qb/(dx1a(i+1) + dx1a(i))
+        ppazc1(2,i) = qb/(dx1a(i-1) + dx1a(i))
+        ppazc1(3,i) = (2.0*dx1a(i-1)+dx1a(i))*dx1a(i)*ppazc1(1,i)
+        ppazc1(4,i) = (2.0*dx1a(i+1)+dx1a(i))*dx1a(i)*ppazc1(2,i)
+80    continue
+      do 90 i=is,ie+1
+        qa = dx1a(i-1) + dx1a(i)
+        qc = dx1a(i-2) + dx1a(i+1) + qa
+        ppazc1(7,i) = dx1a(i-1)*(dx1a(i-1)+dx1a(i-2))
+     &                 /((2.0*dx1a(i-1)+dx1a(i  ))*qc)
+        ppazc1(8,i) = dx1a(i  )*(dx1a(i  )+dx1a(i+1))
+     &                 /((2.0*dx1a(i  )+dx1a(i-1))*qc)
+        qd = 2.0/qa*(dx1a(i)*ppazc1(7,i)-dx1a(i-1)*ppazc1(8,i))
+        ppazc1(5,i) = dx1a(i-1)/qa + qd
+        ppazc1(6,i) = dx1a(i  )/qa - qd
+90    continue
+c
+      return
+      end

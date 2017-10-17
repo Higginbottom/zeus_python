@@ -1,0 +1,142 @@
+#include "zeus2d.def"
+c=======================================================================
+c/////////////////////////  SUBROUTINE NUDT  \\\\\\\\\\\\\\\\\\\\\\\\\\\
+c
+       subroutine nudt
+c
+c  PURPOSE: Computes the new explicit timestep using the updated values 
+c  of the field variables from the source and transport steps.
+c  In explicit calculations, the timestep is given by:
+c     dt = courno*(dtcsi2 + dtv1i2 + dtv2i2 + dtali2 + dtqqi2)**(-0.5)
+c  where the variable names are described below.  The timestep can be
+c  reduced in size by any amount, but can be larger than the old timstep
+c  by no more than a factor of 1.26.
+c
+c  EXTERNALS: [none]
+c
+c  LOCALS:
+c  dt**i2 = inverse time step squared due to the ** physical process.
+c    Possible values of ** are:
+c           cs = sound speed
+c           v1 = fluid motion in x1 direction
+c           v2 = fluid motion in x2 direction
+c           al = Alfven waves
+c           qq = artificial viscosity
+c    Note the first four are arrays, while the last is a scalar which
+c    has been computed in VISCUS (passed in via root)
+c  dttoi2j = maximum total inverse time step squared along a i sweep
+c  index(j),imax,jmax= indices of maximum dttoi2mx (imax for each j
+c    sweep are stored in index) 
+c  dt**i2j = values of above at imax,j
+c  dt**    = time step due to the ** physical process at imax,jmax. 
+c  dtcsmn  = minimum sound speed time step limit over grid
+c-----------------------------------------------------------------------
+      implicit NONE
+#include "param.h"
+#include "grid.h"
+#include "field.h"
+#include "root.h"
+#include "scratch.h"
+      integer i,j,imax,imaxcs,imaxc,jmax,jmaxcs,jmaxc
+      REAL    dxmin2,dtcsmn,dtcmn
+      REAL
+     &   dtcs i 2(in) , dtcs i 2 j(jn)
+     & , dtc  i 2(in) , dtc  i 2mx(jn)
+     & , dtv1 i 2(in) , dtv1 i 2 j(jn)
+     & , dtv2 i 2(in) , dtv2 i 2 j(jn)
+     & , dtal i 2(in) , dtal i 2 j(jn)
+     & , dtto i 2(in) , dtto i 2 j(jn)
+     &                , dtcs i 2mx(jn)
+     &                , index     (jn) , sound(in,jn)
+      equivalence
+     &   (dtcs i 2,wi1) , (dtcs i 2 j,wj1)
+     & , (dtc  i 2,wi2) , (dtc  i 2mx,wj2)
+     & , (dtv1 i 2,wi3) , (dtv1 i 2 j,wj3)
+     & , (dtv2 i 2,wi4) , (dtv2 i 2 j,wj4)
+     & , (dtal i 2,wi5) , (dtal i 2 j,wj5)
+     & , (dtto i 2,wi6) , (dtto i 2 j,wj6)
+     &                  , (dtcs i 2mx,wj7)
+     &                  , (index     ,wj9) , (sound,wa)
+c
+      integer ismax
+      external ismax,pgas
+#ifdef MHD
+      REAL bsq
+#endif
+c\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\///////////////////////////////////
+c=======================================================================
+c
+      call pgas 
+      do 20 j=js,je
+        do 10 i=ii(j),io(j)
+          sound(i,j) = gamma*p(i,j)/d(i,j)
+10      continue
+20    continue
+      do 30 i=is,ie
+        dtali2(i) = 0.0
+30    continue
+      do 50 j=js,je
+        do 40 i=ii(j),io(j)
+          dxmin2    =   min(dx1a(i),g2b(i)*dx2a(j))**2
+          dtcsi2(i) = sound(i,j)/dxmin2
+          dtv1i2(i) = ((v1(i,j) - vg1(i))        *dx1ai(i) )**2
+          dtv2i2(i) = ((v2(i,j) - vg2(j))/(g2b(i)*dx2a (j)))**2
+#ifdef MHD
+          bsq = 0.25*( (b1(i,j) + b1(i  ,j+1))**2
+     &                +(b2(i,j) + b2(i+1,j  ))**2 ) + (b3(i,j))**2
+          dtali2(i) = bsq/(d(i,j)*dxmin2)
+#endif
+          dtc i2(i) = dtcsi2(i) + dtali2(i)
+          dttoi2(i) = dtcsi2(i) + dtv1i2(i) + dtv2i2(i) + dtali2(i)
+		  
+	      dt_csound(i,j)   = 1.0/ (sqrt(dtcsi2(i)) + tiny)
+	      dt_v1(i,j)   = 1.0/ (sqrt(dtv1i2(i)) + tiny)
+	      dt_v2(i,j)   = 1.0/ (sqrt(dtv2i2(i)) + tiny)
+	      dt_alfen(i,j)   = 1.0/ (sqrt(dtali2(i)) + tiny)
+	      dt_viscosity(i,j)  = 1.0/ (sqrt(dtqqi2) + tiny)
+		  
+		  
+40      continue
+        imax        = ismax(nx1(j),dttoi2(ii(j)),1) + iim1(j)
+        imaxcs      = ismax(nx1(j),dtcsi2(ii(j)),1) + iim1(j)
+        imaxc       = ismax(nx1(j),dtc i2(ii(j)),1) + iim1(j)
+        index   (j) = imax
+        dttoi2j (j) = dttoi2( imax )
+        dtcsi2j (j) = dtcsi2( imax )
+        dtv1i2j (j) = dtv1i2( imax )
+        dtv2i2j (j) = dtv2i2( imax )
+        dtali2j (j) = dtali2( imax )
+        dtcsi2mx(j) = dtcsi2( imaxcs )
+        dtc i2mx(j) = dtc i2( imaxc  )
+50    continue
+      jmax   = ismax(nx2z, dttoi2j (js), 1) + js - 1
+      jmaxcs = ismax(nx2z, dtcsi2mx(js), 1) + js - 1
+      jmaxc  = ismax(nx2z, dtc i2mx(js), 1) + js - 1
+      imax = index ( jmax )
+      dtcs   = 1.0/ (sqrt(dtcsi2j (jmax  )) + tiny)
+      dtv1   = 1.0/ (sqrt(dtv1i2j (jmax  )) + tiny)
+      dtv2   = 1.0/ (sqrt(dtv2i2j (jmax  )) + tiny)
+      dtal   = 1.0/ (sqrt(dtali2j (jmax  )) + tiny)
+      dtqq   = 1.0/ (sqrt(dtqqi2          ) + tiny)
+	  dtcsmn = 1.0/ (sqrt(dtcsi2mx(jmaxcs)) + tiny)
+      dtc mn = 1.0/ (sqrt(dtc i2mx(jmaxc )) + tiny)
+c	  print *,"dtcs=",dtcs," dtv1=",dtv1," dtv2=",dtv2," dtal="
+c     &  ,dtal," dtqq=",dtqq
+c
+c      print *,nred
+      dtnew  = courno / sqrt(dttoi2j(jmax) + dtqqi2 + tiny)
+      dt     =   min(dtnew, 1.26*dt)/4.0**nred
+c	print *,"******************* dt set to ",dt,time
+      if ((time+dt) .gt. tlim) dt = tlim-time
+      if (dt .gt. 5.0*dtmin) return
+c
+      write(2,"(1x,'WARNING from NUDT: hot zone at i=',i4,' j=',i4,
+     &' (dt < 5.0*dtmin)',/1x,'dt = ',1pe12.5,' dtmin = ',1e12.5,
+     &' nhy = ',i6,/1x,'dtcs = ',1e12.5,' dtv1 = ',1e12.5,' dtv2 = ',
+     & 1e12.5,/1x,'dtqq = ',1e12.5,' dtal = ',1e12.5)")
+     &   imax,jmax,dt,dtmin,nhy,dtcs,dtv1,dtv2,dtqq,dtal
+      nwarn = nwarn + 1
+c
+
+      return
+      end

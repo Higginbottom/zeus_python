@@ -1,0 +1,255 @@
+#include "zeus2d.def"
+c=======================================================================
+c/////////////////////////  SUBROUTINE X2INTFC  \\\\\\\\\\\\\\\\\\\\\\\\
+c
+      subroutine x2intfc(q,vel,i,gfct,iord,istp,qi)
+c
+c  PURPOSE: This routine performs the same function for face centered 
+c  variables as the routine X2INTZC does for zone centered variables.
+c  Thus, see comments for X2INTZC.  Note no contact steepener is used
+c  for face centered variables since only the density is ever steepened.
+c
+c  INPUT ARGUMENTS:
+c   q    = vector to be interpolated
+c       NOTE: active zones for q should be j=jip1(i),jo(i);i given below
+c   vel  = relative fluid velocity at interpolation point
+c   i    = index of column being interpolated
+c   gfct = "g2" metric scale factor at appropriate radius.  Will be
+c         either g2a or g2b depending on centering of variable q.
+c   iord = desired order of interpolation
+c   istp = steepener switch (0 = off, 1 = always on)
+c
+c  OUTPUT ARGUMENTS:
+c   qi = vector of interface (interpolated) values
+c
+c  EXTERNALS: CVMGT
+c
+c  LOCALS:
+c-----------------------------------------------------------------------
+      implicit NONE
+#include "param.h"
+#include "grid.h"
+#include "root.h"
+#include "scratch.h"
+      integer i,iord,istp
+      REAL    one
+      REAL    q (jn),vel(jn),gfct(in),qi(jn)
+c
+      integer j
+      REAL    deltq (jn), deltq2(jn), dq    (jn), d2q   (jn)
+     &      , qri   (jn), qli   (jn), xi    (jn), dqi   (jn)
+     &      , ql3   (jn), qr3   (jn), dql   (jn), dqr   (jn), dv(jn)
+      REAL  d2qmin
+      REAL  dqm,q6,dqq6,dqsq,flag,xi2
+      equivalence   (deltq,dql,wj14) , (deltq2,dqr,wj15) , (dq,wj16)
+     &          , (dv,d2q,wj17) , (qri ,wj18) , (qli  ,wj19) , (xi,wj20)
+     &          , (dqi,wj21) , (ql3 ,wj22) , (qr3  ,wj23)
+      logical global(jn)
+c\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\/////////////////////////////////////
+c=======================================================================
+c
+      one = 1.0
+c
+c--------------  1st order (donor cell) interface values  --------------
+c
+      if (iord .eq. 1) then
+        do 10 j=ji(i),jo(i)
+          if (vel(j) .ge. 0.0) qi(j) = q(j  )
+          if (vel(j) .lt. 0.0) qi(j) = q(j+1)
+10      continue
+        return
+      endif
+c
+c---------------  2nd order (van Leer) interface values ----------------
+c  the algorithm used accounts for a non-uniform grid
+c
+      if (iord .eq. 2) then
+c
+c  Evaluate left- and right-interface slopes, monotonise.
+c
+        deltq(ji(i)) = (q(ji(i)) - q(jim1(i)))*dx2ai(jim1(i))
+        do 100 j=ji(i),jop1(i)
+          deltq(j+1) = (q(j+1) - q(j))*dx2ai(j)
+          deltq2(j) = deltq(j)*deltq(j+1)
+          dq(j)     = 0.0
+          if (deltq2(j) .gt. 0.0) dq(j)=deltq2(j)/(deltq(j)+deltq(j+1))
+100     continue
+c
+c  choose time averaged, upstream value
+c
+        do 110 j=ji(i),jo(i)
+          xi(j) = vel(j)*dt/(gfct(i))
+          if (vel(j) .ge. 0.0) qi(j)= q(j  ) + (dx2b(j  )-xi(j))*dq(j  )
+          if (vel(j) .lt. 0.0) qi(j)= q(j+1) - (dx2b(j+1)+xi(j))*dq(j+1)
+110     continue
+        return
+      endif
+c
+c------------------ 3rd order (ppm) interface values -------------------
+c
+      if (iord .eq. 3) then
+c
+c  1.  Determine second derivative of q across zone (eqn 1.17).
+c
+        do 200 j=ji(i),jop1(i)
+          dql(j) = q(j  ) - q(j-1)
+          dqr(j) = q(j+1) - q(j  )
+          d2q(j) = ppafc2(1,j)*dqr(j) - ppafc2(2,j)*dql(j)
+200     continue
+        d2q(jim1(i)) = d2q(ji  (i))
+        d2q(jop2(i)) = d2q(jop1(i))
+c
+c  2.  Identify global extrema (using a seven zone molecule).  Note
+c      global is centered the same as q
+c
+        do 210 j=jip1(i),jo(i)
+          d2qmin    = abs(q(j)) * 0.05 * gfct(i)**2
+          global(j) = .false.
+          if ( d2q(j-2)*d2q(j-1) .gt. 0.0 .and.
+     1         d2q(j-1)*d2q(j  ) .gt. 0.0 .and.
+     2         d2q(j  )*d2q(j+1) .gt. 0.0 .and.
+     3         d2q(j+1)*d2q(j+2) .gt. 0.0 .and.
+     4         abs(d2q(j)).gt.d2qmin ) global(j) = .true.
+210     continue
+        global(ji  (i)) = global(jip1(i))
+        global(jim1(i)) = global(jip1(i))
+        global(jop1(i)) = global(jo  (i))
+        global(jop2(i)) = global(jo  (i))
+c
+c  3.  Determine first difference of q across zone (eqns 1.7 and 1.8).
+c
+        do 220 j=ji(i),jop1(i)
+          dq(j) = ppafc2(3,j)*dqr(j) + ppafc2(4,j)*dql(j)
+          dqm    = min(2.0*abs(dql(j)),2.0*abs(dqr(j)),abs(dq(j)))
+          if (dqr(j)*dql(j).gt. 0.0) then
+            dqi(j) = sign(one,dq(j))*dqm
+          else
+            dqi(j) = 0.0
+          endif
+          if (.not.global(j)) dq (j) = dqi(j)
+220     continue
+        dq(jim1(i)) = dq(ji  (i))
+        dq(jop2(i)) = dq(jop1(i))
+c
+c  4.  Evaluate interface values (eqn 1.6).
+c
+        do 230 j=ji(i),jo(i)
+          qi(j) = ppafc2(5,j)* q(j+1) + ppafc2(6,j)* q(j)
+     &          - ppafc2(7,j)*dq(j+1) + ppafc2(8,j)*dq(j)
+230     continue
+        qi(jim1(i)) = qi(ji(i)) - dq(ji  (i))
+        qi(jop1(i)) = qi(jo(i)) + dq(jop1(i))
+c
+c  5.  Evaluate left- and right-interface values
+c
+        do 240 j=ji(i),jop1(i)
+          qli(j) = qi(j-1)
+          qri(j) = qi(j  )
+240     continue
+c
+c      a)  monotonise interface values (eqn 1.10)
+c
+        do 250 j=ji(i),jop1(i)
+          dqm = qri(j) - qli(j)
+          q6  = 6.0*(q(j)-0.5*(qli(j)+qri(j)))
+          dqq6 = dqm*q6
+          dqsq = dqm*dqm
+          flag = (q(j)-qri(j))*(q(j)-qli(j))
+          if (flag .le. 0.0) then
+            ql3(j) = qli(j)
+            qr3(j) = qri(j)
+          else
+            ql3(j) = q(j)
+            qr3(j) = q(j)
+          endif
+          if (dqsq-dqq6.le.0.0) then
+            ql3(j) = 3.0*q(j)-2.0*qri(j)
+          else
+            ql3(j) = qli(j)
+          endif
+          if (dqsq+dqq6.le.0.0) then
+            qr3(j) = 3.0*q(j)-2.0*qli(j)
+          else
+            qr3(j) = qri(j)
+          endif
+250     continue
+c
+c  7.  Third order interpolations complete.  Time averaging, upwinded
+c      selection, and final interface values to be returned
+c
+        do 260 j=ji(i),jo(i)
+          xi(j)    = abs(vel(j)) * dt / (gfct(i)*dx2b(j))
+          xi(j) = abs(vel(j)) * dt / (gfct(i)*dx2a(j))
+          xi2    = xi(j) - xi(j)**2
+          dqr(j) = q(j  )-qri(j  )
+          dql(j) = q(j+1)-qli(j+1)
+          if (vel(j) .ge. 0.0) then
+            qi (j) = qri(j  ) + xi(j)*dqr(j) + xi2*(2.0*q(j  )
+     &             - qli(j  ) - qri(j  ))
+          else
+            qi (j) = qli(j+1) + xi(j)*dql(j) + xi2*(2.0*q(j+1)
+     &             - qli(j+1) - qri(j+1))
+          endif
+260     continue
+        return
+      endif
+c
+c---  velocity corrected 2nd order (van Leer) interface values  --------
+c  the algorithm used accounts for a non-uniform grid and velocity
+c  variation across a zone (see Finn and Hawley,1989)
+c
+      if (iord .eq. 4) then
+c
+c  Evaluate left- and right-interface slopes, monotonise.
+c
+        deltq(ji(i)) = (q(ji(i)) - q(jim1(i)))*dx2ai(jim1(i))
+        do 300 j=ji(i),jop1(i)
+          deltq(j+1) = (q(j+1) - q(j))*dx2ai(j)
+          deltq2(j) = deltq(j)*deltq(j+1)
+          dq(j)     = 0.0
+          if (deltq2(j) .gt. 0.0) dq(j)=deltq2(j)/(deltq(j)+deltq(j+1))
+          if(vel(j).ge.0.0) dv(j)=(vel(j  )-vel(j-1))*dx2bi(j  )/gfct(i)
+          if(vel(j).lt.0.0) dv(j)=(vel(j+1)-vel(j  ))*dx2bi(j+1)/gfct(i)
+300     continue
+c
+c  choose time averaged, upstream value
+c
+        do 310 j=ji(i),jo(i)
+          xi(j) = vel(j)*dt/(gfct(i))
+          if (vel(j) .ge. 0.0) qi(j)= q(j  ) + (dx2b(j  )-xi(j))*dq(j  )
+     .        - 0.5*dt*dv(j)*(q(j  ) + dx2b(j  )*dq(j  ))
+          if (vel(j) .lt. 0.0) qi(j)= q(j+1) - (dx2b(j+1)+xi(j))*dq(j+1)
+     .        - 0.5*dt*dv(j)*(q(j+1) - dx2b(j+1)*dq(j+1))
+310     continue
+        return
+      endif
+c
+c--  2nd order (van Leer) interface values using non-harmonic average --
+c  the algorithm used accounts for a non-uniform grid
+c
+      if (iord .eq. 5) then
+c
+c  Evaluate left- and right-interface slopes, monotonise.
+c
+        do 400 j=ji(i),jop1(i)
+          dql(j) = q(j  ) - q(j-1)
+          dqr(j) = q(j+1) - q(j  )
+          dq(j) = ppafc2(3,j)*dqr(j) + ppafc2(4,j)*dql(j)
+          dqm    = min(2.0*abs(dql(j)),2.0*abs(dqr(j)),abs(dq(j)))
+          if (dqr(j)*dql(j).gt. 0.0) then
+            dq (j) = sign(one,dq(j))*dqm
+          else
+            dq (j) = 0.0
+          endif
+400     continue
+c
+c  choose time averaged, upstream value
+c
+        do 410 j=ji(i),jo(i)
+          xi(j) = 0.5*vel(j)*dt/(gfct(i))
+          if (vel(j).ge.0.0) qi(j)=q(j  )+(0.5-xi(j)*dx2bi(j  ))*dq(j  )
+          if (vel(j).lt.0.0) qi(j)=q(j+1)-(0.5+xi(j)*dx2bi(j+1))*dq(j+1)
+410     continue
+        return
+      endif
+      end

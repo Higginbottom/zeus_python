@@ -1,0 +1,86 @@
+#include "zeus2d.def"
+c=======================================================================
+c//////////////////////////  SUBROUTINE STV1  \\\\\\\\\\\\\\\\\\\\\\\\\\
+c
+      subroutine stv1(j,st1)
+c
+c  PURPOSE: Calculates the source terms in the equation of motion for v1
+c  over the entire grid.  Currently, the source terms
+c  are:  ST = - (GRAD(P))/rho    -- pressure   gradient
+c             + (GRAD(phi))      -- grav. pot. gradient (phi > 0)
+c             - G*M/R**2         -- grav. force due to a central pt mass
+c             + (VROT)**2/R      -- rotation pseudo-force
+c             + (j X B)/rho      -- Lorentz force
+c             + Xf/c*F           -- radiation force
+c  Note that only source terms due to "real physics" are included here. 
+c  Source terms due to artificial viscosity are in the routine VISCUS.
+c
+c  INPUT ARGUMENTS:
+c   j  = index of j sweep
+c
+c  OUTPUT ARGUMENTS:
+c   st1 = array of source terms at interfaces along 1-direction 
+c
+c  EXTERNALS: [none]
+c
+c  LOCALS:
+c   rhoi = inverse density at interface in 1-direction
+c-----------------------------------------------------------------------
+      implicit NONE
+#include "param.h"
+#include "grid.h"
+#include "field.h"
+#include "gravity.h"
+#include "radiation.h"
+
+      REAL st1(ijn)
+c
+      integer  i,j
+      REAL     rhoi,r2i,j2
+c\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\//////////////////////////////////
+c=======================================================================
+c
+      do 10 i=iip1(j),io(j)
+        rhoi = 2.0/(d(i-1,j) + d(i,j))
+        st1(i) =    -rhoi*(p  (i,j) - p  (i-1,j))*dx1bi(i) 
+#ifdef GRAV
+        st1(i) = st1(i) + (phi(i,j) - phi(i-1,j))*dx1bi(i)
+#endif
+        st1(i) = st1(i) +
+     &        (0.25*( v2(i  ,j) + v2(i  ,j+1)
+     &              + v2(i-1,j) + v2(i-1,j+1) ))**2*dg2ad1(i)/g2a(i)
+#ifdef ROTATE
+        st1(i)= st1(i)+0.5*(v3(i,j)**2+v3(i-1,j)**2)*dg31ad1(i)/g31a(i)
+c        st1(i)= st1(i) + (0.5*(v3(i,j)+v3(i-1,j)))**2*dg31ad1(i)/g31a(i)
+#endif
+#ifdef MHD
+        j2 = -(g31b(i  )*b3(i  ,j)-g31b(i-1)*b3(i-1,j))*dx1bi(i)/g31a(i)
+        st1(i) = st1(i) + rhoi*(0.5*(b3(i,j) + b3(i-1,j))*j2
+     &   -0.5*((g2b(i)*b2(i,j+1)-g2b(i-1)*b2(i-1,j+1))/(g2a(i)*dx1b(i))
+     &        +(g2b(i)*b2(i,j  )-g2b(i-1)*b2(i-1,j  ))/(g2a(i)*dx1b(i)))
+     &          *0.25*(b2(i,j) + b2(i,j+1) + b2(i-1,j) + b2(i-1,j+1)))
+#endif
+#ifdef RAD
+        st1(i) = st1(i) - rhoi*fr1(i,j)*(er(i,j)-er(i-1,j))*dx1bi(i)
+#endif
+10    continue
+c
+c  Add point mass gravitational potential
+c
+      if (ptmass .eq. 0.0) return
+      do 20 i=iip1(j),io(j)
+#ifdef XY
+        r2i = 0.0
+#endif
+#ifdef RZ
+        r2i = (x1a(i)-x1a(izero))**2 + x2b(j)**2
+        r2i = (x1a(i)-x1a(izero))/r2i**1.5
+#endif
+#ifdef RT
+        r2i = 1.0/x1a(i)**2
+#endif
+        st1(i) = st1(i) - g*ptmass*r2i
+20    continue
+c
+      return
+      end

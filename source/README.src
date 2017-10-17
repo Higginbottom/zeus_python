@@ -1,0 +1,77 @@
+
+COMPILING ZEUS-2D
+
+To generate a ZEUS-2D executable on machine X for test problem Y,
+invoke Make_zeus2d as follows (substituting the desired strings for X
+and Y from the lists below):
+
+  Make_zeus2d -v -m X -p Y compile
+
+Example: Make_zeus2d -v -m cray -p shkset.mhd.2 compile
+
+This performs the following tasks:
+
+  1) The appropriate macro definition file "zeus2d.def.Y" in directory ../tst/ 
+     is copied to the filename "zeus2d.def" in this directory (unless
+     a zeus2d.def is already present here; be careful about this).
+
+  2) The corresponding problem generator source file in directory ../tst/ is 
+     copied to this directory.
+
+  3) The Makefile is written and executed to produce zeus2d.exe in the
+     directory ../exe/
+
+  4) The appropriate input file z2dinput is copied from z2dinput.Y to
+     z2dinput (unless it is already present; be careful about this, too!)
+     in the directory ../exe/.
+
+  5) All you need to do to run ZEUS-2D is cd to ../exe and enter "zeus2d.exe"!
+
+Notes
+
+     If you are compiling on a machine for the first time, use the -v
+     option. This will print a menu as the script runs
+     that lets you change compilers, flags, loaders, libraries, etc.
+
+     The Makefile produced by Make_zeus2d can be used for subsequent
+     compilations, if desired.  The syntax is: 'make compile'
+     The most useful task the Makefile can perform is to clear out the 
+     *.f and *.o files ('make clean'), along with zeus2d.def,
+     ../exe/z2dinput, and ../exe/zeus2d.exe ('make cleaner').
+
+     An example USERDUMP routine has been provided for the convenience
+     of those who wish to write human-readable text output files.  The
+     source is in userdmp.src.  To use it, just include "-u userdmp" on 
+     the Make_zeus2d command line.
+     
+
+Makefiles are known to work for machines:
+
+   X=sun      Sun Microsystems workstations (SUN SUNOS       also work )
+   X=sgi      Silicon Graphics systems      (SGI IRIX        also work )
+   X=cray     Cray running unicos           (UNICOS          also works)
+   X=convex   Convex C2 or C3 systems       (CONVEX CONVEXOS also work )
+   X=ibm      IBM RS/6000 workstations      (IBM RS6000      also work )
+   X=hp       Hewlett Packard PA-RISC       (HP HP-UX        also work )
+   X=exemplar Convex Exemplar               (EXEMPLAR        also works)
+   X=dec      DEC Alpha workstations        (DEC alpha ALPHA also work )
+   X=(other)  Other machines are treated like sun; the -v option is set
+	      automatically, allowing you to enter compiler names, etc.,
+	      and produce a Makefile that suits your UNIX system
+
+Test problem cases are:
+
+   Y=shkset.sod      Sod shocktube
+   Y=shkset.mhd.1    MHD Riemann problem in the 1- or 2-directions.
+   Y=shkset.mhd.2    MHD Riemann problem in the 1- or 2-directions.
+   Y=diffuse         diffusion of Gaussian pulse in optically thick medium
+   Y=stream          propagation of a step of radiation energy in an optically 
+                     thin medium
+   Y=blast.RZ        Supernova remnant expansion in RZ coordinates
+   Y=blast.RT        Supernova remnant expansion in RT coordinates 
+
+Note that blast.RZ tends to run into (underflow) errors unless it is performed
+in 64-bit precision arithmetic.  The appropriate data typing has been added
+to the code for version 2.0.3 by Robert Fiedler to allow computing in double
+precision by setting the REAL macro to "real*8".
+

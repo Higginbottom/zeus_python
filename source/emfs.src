@@ -1,0 +1,197 @@
+#include "zeus2d.def"
+c=======================================================================
+c///////////////////////////  SUBROUTINE EMFS  \\\\\\\\\\\\\\\\\\\\\\\\\
+c
+      subroutine emfs(term1,term2)
+#ifdef MHD
+c
+c  PURPOSE: Computes the emf's to be used in the CT scheme update of the
+c  magnetic field components using upwind differencing along
+c  characteristics.
+c
+c  EXTERNALS: X1INTZC, X2INTZC
+c
+c  LOCALS:
+c-----------------------------------------------------------------------
+      implicit NONE
+#include "param.h"
+#include "grid.h"
+#include "field.h"
+#include "root.h"
+#include "bndry.h"
+#include "scratch.h"
+      REAL one
+      REAL term1(in,jn),term2(in,jn)
+      integer i,j,ilower
+      REAL va(ijn),vm(ijn),vp(ijn),v0(ijn),tv(ijn),tb(ijn)
+     &    ,v2m(in),b2m(in),v2p(in),b2p(in),v20(in),b20(in)
+     &    ,v1m(jn),b1m(jn),v1p(jn),b1p(jn),v10(jn),b10(jn)
+     &    ,b2star(in,jn),v2star(in,jn),b1star(jn),v1star(jn),sgn,sdp,sdm
+      equivalence
+     & (va ,wij0),(vp ,wij1),(vm ,wij2),(v0 ,wij3),(tv ,wij4),(tb ,wij5)
+     &,(v2m,wi 0),(b2m,wi 1),(v2p,wi 2),(b2p,wi 3),(v20,wi 4),(b20,wi 5)
+     &,(v1m,wj 0),(b1m,wj 1),(v1p,wj 2),(b1p,wj 3),(v10,wj 4),(b10,wj 5)
+     &,(b2star,wc),(v2star,wd),(b1star,wj6),(v1star,wj7)
+c
+      external x1intzc,x2intzc
+c\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\//////////////////////////////////
+c=======================================================================
+c
+      one = 1.0
+c 
+c  Start with MoC calculation of v2* and b2*
+c
+      do 100 j=js,je+1
+c
+c  wave speeds
+c
+        do 10 i=ii(j),iop1(j)
+          va(i) = 0.5*abs(b1(i,j)+b1(i,j-1))
+     &      /sqrt(0.25*(d(i-1,j)+d(i-1,j-1)+d(i,j)+d(i,j-1)))
+          va(i) = max(va(i), tiny)
+	  v0(i) = 0.5*(v1(i,j)+v1(i,j-1))-vg1(i)
+          vp(i) = v0(i) + va(i)
+          vm(i) = v0(i) - va(i)
+10      continue
+c
+c  interpolations
+c
+        do 20 i=iim2(j),iop2(j)
+          tv(i) = v2(i,j)-vg2(j)
+          tb(i) = b2(i,j)
+20      continue
+        call x1intzc(tv,vm,wi0,j,iords2,0,v2m)
+        call x1intzc(tb,vm,wi0,j,iordb2,0,b2m)
+        call x1intzc(tv,vp,wi0,j,iords2,0,v2p)
+        call x1intzc(tb,vp,wi0,j,iordb2,0,b2p)
+c
+c  boundary conditions on interpolated variables
+c
+        if (miib(j).eq.1 .or. miib(j).eq.-1) then
+          v2p(ii  (j)) = v2m(ii  (j))
+          b2p(ii  (j)) = b2m(ii  (j))
+        endif
+        if (miib(j).eq.2) then
+          v2p(ii  (j)) = v2m(ii  (j))
+          b2p(ii  (j)) = b2m(ii  (j))
+        endif
+        if (miib(j).eq.4) then
+          v2p(ii  (j)) = v2p(iop1(j))
+          b2p(ii  (j)) = b2p(iop1(j))
+        endif
+        if (miib(j).eq.5) then
+          v2p(ii  (j)) = v2m(ii  (j))
+          b2p(ii  (j)) =-b2m(ii  (j))
+        endif
+c
+        if (moib(j).eq.1 .or. moib(j).eq.-1) then
+          v2m(iop1(j)) = v2p(iop1(j))
+          b2m(iop1(j)) = b2p(iop1(j))
+        endif
+        if (moib(j).eq.2) then
+          v2m(iop1(j)) = v2p(iop1(j))
+          b2m(iop1(j)) = b2p(iop1(j))
+        endif
+        if (moib(j).eq.4) then
+          v2m(iop1(j)) = v2m(ii  (j))
+          b2m(iop1(j)) = b2m(ii  (j))
+        endif
+        if (moib(j).eq.5) then
+          v2m(iop1(j)) = v2p(iop1(j))
+          b2m(iop1(j)) =-b2p(iop1(j))
+        endif
+c
+c  solve MoC equations for starred quantities
+c
+        do 40 i=ii(j),iop1(j)
+          sgn = sign(one,(b1(i,j)+b1(i,j-1)))
+          sdm = sqrt(0.5*(d(i  ,j)+d(i  ,j-1)))
+          sdp = sqrt(0.5*(d(i-1,j)+d(i-1,j-1)))
+          b2star(i,j) = sgn*(b2m(i)/sdm + b2p(i)/sdp) + (v2m(i)-v2p(i))
+          b2star(i,j) = sgn*b2star(i,j)/(1.0/sdp + 1.0/sdm)
+          v2star(i,j) = (v2m(i)+v2p(i)) + sgn*(b2m(i)/sdm-b2p(i)/sdp)
+          v2star(i,j) = 0.5*(v2star(i,j) +
+     &                   sgn*(1.0/sdp - 1.0/sdm)*b2star(i,j))
+40      continue
+100   continue
+c
+c  Now do MoC calculation of v1* and b1*.  Steps are the same as above
+c  Trap needed in RT at r=0
+c
+      ilower = is
+#ifdef RT
+      if (g2a(js) .eq. 0.0) ilower = is+1
+#endif
+      do 200 i=ilower,ie+1
+        do 110 j=ji(i),jop1(i)
+          va(j) = 0.5*abs(b2(i,j)+b2(i-1,j))
+     &     /sqrt(0.25*(d(i,j-1)+d(i-1,j-1)+d(i,j)+d(i-1,j)))
+          va(j) = max(va(j), tiny)
+	  v0(j) = 0.5*(v2(i,j)+v2(i-1,j))-vg2(j)
+          vm(j) = v0(j) - va(j)
+          vp(j) = v0(j) + va(j)
+110     continue
+        do 120 j=jim2(i),jop2(i)
+          tv(j) = v1(i,j)-vg1(i)
+          tb(j) = b1(i,j)
+120     continue
+        call x2intzc(tv,vm,wj0,i,g2a,iords1,0,v1m)
+        call x2intzc(tb,vm,wj0,i,g2a,iordb1,0,b1m)
+        call x2intzc(tv,vp,wj0,i,g2a,iords1,0,v1p)
+        call x2intzc(tb,vp,wj0,i,g2a,iordb1,0,b1p)
+c
+        if (mijb(i) .eq. 1 .or. mijb(i).eq.-1) then
+          v1p(ji  (i)) = v1m(ji  (i))
+          b1p(ji  (i)) = b1m(ji  (i))
+        endif
+        if (mijb(i) .eq. 2) then
+          v1p(ji  (i)) = v1m(ji  (i))
+          b1p(ji  (i)) = b1m(ji  (i))
+        endif
+        if (mijb(i) .eq. 4) then
+          v1p(ji  (i)) = v1p(jop1(i))
+          b1p(ji  (i)) = b1p(jop1(i))
+        endif
+        if (mijb(i) .eq. 5) then
+          v1p(ji  (i)) = v1m(ji  (i))
+          b1p(ji  (i)) =-b1m(ji  (i))
+        endif
+c
+        if (mojb(i) .eq. 1 .or. mojb(i) .eq. -1) then
+          v1m(jop1(i)) = v1p(jop1(i))
+          b1m(jop1(i)) = b1p(jop1(i))
+        endif
+        if (mojb(i) .eq. 2) then
+          v1m(jop1(i)) = v1p(jop1(i))
+          b1m(jop1(i)) = b1p(jop1(i))
+        endif
+        if (mojb(i) .eq. 4) then
+          v1m(jop1(i)) = v1m(ji  (i))
+          b1m(jop1(i)) = b1m(ji  (i))
+        endif
+        if (mojb(i) .eq. 5) then
+          v1m(jop1(i)) = v1p(jop1(i))
+          b1m(jop1(i)) =-b1p(jop1(i))
+        endif
+c
+        do 140 j=ji(i),jop1(i)
+          sgn = sign(one,(b2(i,j)+b2(i-1,j)))
+          sdm = sqrt(0.5*(d(i,j  )+d(i-1,j  )))
+          sdp = sqrt(0.5*(d(i,j-1)+d(i-1,j-1)))
+          b1star(j) = sgn*(b1m(j)/sdm + b1p(j)/sdp) + (v1m(j)-v1p(j))
+          b1star(j) = sgn*b1star(j)/(1.0/sdp + 1.0/sdm)
+          v1star(j) = (v1m(j)+v1p(j)) + sgn*(b1m(j)/sdm-b1p(j)/sdp)
+          v1star(j) = 0.5*(v1star(j) +
+     &                 sgn*(1.0/sdp - 1.0/sdm)*b1star(j))
+140     continue
+c
+c  Compute terms in emfs
+c
+        do 150 j=ji(i),jop1(i)
+          term1(i,j) = v1star(j)*b2star(i,j)
+          term2(i,j) = b1star(j)*v2star(i,j)
+150     continue
+200   continue
+#endif
+      return
+      end

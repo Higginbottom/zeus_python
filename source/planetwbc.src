@@ -1,0 +1,87 @@
+#include "zeus2d.def"
+c=====================================================================
+c///////////////////  SUBROUTINE PLANETWBC \\\\\\\\\\\\\\\\\\\\\\\\\\\
+c
+      subroutine planetwbc
+c
+c  SETS BOUNDARY CONDITIONS AT BASE OF PLANET WIND
+c
+c     written by: Daniel Proga
+c     date:       May 2008
+c     modified1:  
+c
+c  INPUT PARAMETERS:
+c
+c----------------------------------------------------------------------
+      implicit NONE
+#include "cons.h"
+#include "param.h"
+#include "grid.h"
+#include "field.h"
+#include "root.h"
+#include "scratch.h"
+#include "gravity.h"
+#include "bndry.h"
+#include "planetw.h"
+      real ciso2
+
+      integer i,j,iswitch
+      save iswitch
+c
+      external bvalv1,bvalv2,bvald,bvale	
+c\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\///////////////////////////////////////
+c=======================================================================
+c
+c  Increase sound speed as t^{1/4} to final value given by input HEP
+c
+c       if (gamma .eq. 1.0) then
+c         if (time .gt. 200.0) then
+c          ciso2 = 0.2 + (1.0/hep - 0.2)
+c     &     *min(sqrt((time-200.0)/1000.0),1.0)
+c          ciso = sqrt(ciso2)
+c         endif
+c       endif
+c
+c  switch to adiabatic EOS with gamma=1.01 at t=2000.0
+c
+c       if (time .gt. 2000.0 .and. iswitch=0)
+c         gamma = 1.01
+c         e0  = ciso**2*d0/(gamma*(gamma-1.0))
+c         do  j=js,je
+c         do  i=is,ie
+c           e(i,j)=d(i,j)*ciso**2/(gamma-1.0) 
+c         enddo 
+c         iswitch = 1
+c       endif
+         
+c
+c  set d, e, velocity at first cell in r
+c
+       if (time .lt. t0) then
+       do  j=js,je
+        e (is,j)=eiim1(j)*max(0.01,cos(x2b(j)))  
+c        e (is,j)=eiim1(j)
+c        if (cos(x2b(j)) .lt. 0.0) e(is,j)=0.01*eiim1(j)
+        d (is,j)=diim1(j)  
+        v2(is,j)=0.0
+       enddo 
+       endif
+c
+c increase e at inner boundary for t>t0 to factor eratio larger
+c
+c       if (time .gt. t0) then
+c       do  j=js,je
+c        d (is,j)=diim1(j)  
+c        e (is,j)=eiim1(j) + eiim1(j)*((eratio-1.0)*
+c     &   min(((time-t0)/tramp),1.0)*max(1e-3,cos(x2b(j))))
+c        v2(is,j)=0.0
+c       enddo 
+c       endif
+
+       call bvald
+       call bvale
+       call bvalv1
+       call bvalv2
+
+      return
+      end

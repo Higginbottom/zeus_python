@@ -1,0 +1,112 @@
+#include "zeus2d.def"
+c=======================================================================
+c///////////////////////////  SUBROUTINE FLD  \\\\\\\\\\\\\\\\\\\\\\\\\\
+c
+      subroutine fld
+#ifdef RAD
+c
+c  PURPOSE:  Computes the flux limited diffusion coeficient in Fick's
+c  law for the radiation flux.  Also computes the components of the
+c  tensor variable Eddington factors from the flux limiters.  In this
+c  implementation, two forms for the flux limiter are implemented:
+c   (1) Chapman-Enskog theory    [selected via ifld=1]
+c   (2) piecewise linear Minerbo [selected via ifld=2]
+c  See Levermore & Pomraning, Ap.J., 248, 321 (1981) and Levermore,
+c  JQSRT, 31, 149 (1984) for more details of the forms of the
+c  flux limiters.  Note the diffusion coefficient are face centered,
+c  while all components of the tensor Eddington factors are zone
+c  centered.
+c
+c  EXTERNALS: [none]
+c
+c  LOCALS:
+c-----------------------------------------------------------------------
+      implicit NONE
+#include "param.h"
+#include "grid.h"
+#include "field.h"
+#include "root.h"
+#include "scratch.h"
+#include "radiation.h"
+      integer i,j
+      REAL    t(in),dtde(in),dkapdt(in),der1,der2,dernorm
+     &  ,chi,lmda,qa,qb
+     & ,n1(in,jn),n2(in,jn),r(in,jn),t12(in,jn),tdr(in,jn),tfr(in,jn)
+      equivalence (t,wi0),(dtde,wi1),(dkapdt,wi2)
+     &   ,(n1,wa),(n2,wb),(r,wc),(t12,wd),(tdr,wcg1),(tfr,wcg1(in*jn))
+c\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\/////////////////////////////////
+c=======================================================================
+c  Compute opacity, radiation energy gradient vector, and R
+c
+      do 20 j=js-1,je+1
+	call temp  (e(1,j),d(1,j),gamma,is-1,ie+1,t  (1  ),dtde  (1  ))
+        call absorp(t(1  ),d(1,j),      is-1,ie+1,kap(1,j),dkapdt(1  ))
+        call scatt (t(1  ),d(1,j),      is-1,ie+1,sig(1,j)            )
+	do 10 i=iim1(j),iop1(j)
+          qa = dx1b(i)/(er(i+1,j+1)+er(i-1,j+1)+er(i+1,j-1)+er(i-1,j-1))
+          der1 = (qa*(er(i+1,j)-er(i-1,j)))/ (dx1b(i)+dx1b(i+1))
+          der2 = (qa*(er(i,j+1)-er(i,j-1)))/((dx2b(j)+dx2b(j+1))*g2b(i))
+	  dernorm = sqrt(der1**2 + der2**2)
+	  n1(i,j) = der1/(dernorm+tiny)
+	  n2(i,j) = der2/(dernorm+tiny)
+	  r (i,j) = dernorm/((kap(i,j)+sig(i,j))*0.25*dx1b(i)) + tiny
+10      continue
+20    continue
+c
+c  Compute FLD constant and components of Eddington tensor for 
+c  Chapman-Enskog theory (ifld=1)
+c
+      if (ifld .eq. 1) then
+      do 40 j=js-1,je+1
+	do 30 i=iim1(j),iop1(j)
+	  lmda = (2.0 + r(i,j))/(6.0 + 3.0*r(i,j) + r(i,j)**2)
+	  chi  = lmda + lmda**2*r(i,j)**2
+	  f11(i,j) = 0.5*((1.-chi) + (3.*chi-1.)*n1(i,j)*n1(i,j))
+	  f22(i,j) = 0.5*((1.-chi) + (3.*chi-1.)*n2(i,j)*n2(i,j))
+	  t12(i,j) = 0.5*(           (3.*chi-1.)*n1(i,j)*n2(i,j))
+	  tdr(i,j) = c*lmda/(kap(i,j)+sig(i,j)) 
+          tfr(i,j) = lmda
+30      continue
+40    continue
+      endif
+c
+c  Compute FLD constant and components of Eddington tensor for
+c  piecewise-linear Minerbo theory (ifld=2)
+c
+      if (ifld .eq. 2) then
+      do 60 j=js-1,je+1
+        do 50 i=iim1(j),iop1(j)
+	  qa   = 2.0/(3.0 + sqrt(9.0+12.0*r(i,j)**2))
+	  qb   = 1.0/(1.0 + r(i,j) + sqrt(1.0+2.0*r(i,j)))
+          if (r(i,j) .le. 1.5) then
+            lmda = qa
+          else
+            lmda = qb
+          endif
+	  chi  = lmda + lmda**2*r(i,j)**2
+          f11(i,j) = 0.5*((1.-chi) + (3.*chi-1.)*n1(i,j)*n1(i,j))
+          f22(i,j) = 0.5*((1.-chi) + (3.*chi-1.)*n2(i,j)*n2(i,j))
+          t12(i,j) = 0.5*(           (3.*chi-1.)*n1(i,j)*n2(i,j))
+          tdr(i,j) = c*lmda/(kap(i,j)+sig(i,j))
+          tfr(i,j) = lmda
+50      continue
+60    continue
+      endif
+c
+c  Average diffusion constant to face centers.
+c
+      do 80 j=js,je
+	do 70 i=ii(j),iop1(j)
+	  dr1(i,j) = 0.5*(tdr(i-1,j) + tdr(i,j))
+	  fr1(i,j) = 0.5*(tfr(i-1,j) + tfr(i,j))
+70      continue
+80    continue
+      do 100 i=is,ie
+	do 90 j=ji(i),jop1(i)
+	  dr2(i,j) = 0.5*(tdr(i,j-1) + tdr(i,j))
+	  fr2(i,j) = 0.5*(tfr(i,j-1) + tfr(i,j))
+90      continue
+100   continue
+#endif
+      return
+      end

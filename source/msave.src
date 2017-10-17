@@ -1,0 +1,124 @@
+#include "zeus2d.def"
+c=======================================================================
+c//////////////////////  SUBROUTINES MSAVE,MGET  \\\\\\\\\\\\\\\\\\\\\\\
+c
+      subroutine msave(filename)
+c
+c  PURPOSE:  Writes [reads] all common block variables to the logical
+c  unit iores.  Currently, the common blocks written [read] are:
+c            common /gridvarr/ = real    grid     variables
+c            common /gridvari/ = integer grid     variables
+c            common /fieldr  / = real    field    variables
+c            common /fieldi  / = integer field    variables
+c            common /bndryr  / = real    boundary variables
+c            common /bndryi  / = integer boundary variables
+c            common /rootr   / = real    root     variables
+c            common /rooti   / = integer root     variables
+c            common /gravcomr/ = real    gravity  variables
+c            common /gravcomi/ = integer gravity  variables
+c            common /frmlcomr/ = real    formal soln variables
+c            common /frmlcomi/ = integer formal soln variables
+c            common /mmntcomr/ = real    moment soln variables
+c            common /mmntcomi/ = integer moment soln variables
+c 
+c  EXTERNALS: [none]
+c
+c  LOCALS:
+c-----------------------------------------------------------------------
+      implicit NONE
+#include "param.h"
+#include "grid.h"
+      character*17 filename
+      integer ngridr,ngridi
+      parameter(ngridr  = 49*in + 49*jn + 3
+     .         ,ngridi  = 12*in + 12*jn + 7)
+      REAL    rlgrdvr(ngridr)
+      integer ntgrdvr(ngridi)
+      equivalence (rlgrdvr(1),x1a(1)) , (ntgrdvr(1),iim2(1))
+c-------------------------
+#include "field.h"
+      integer nfield1,nfield2,nfield3,nfield4,nfield5,nfield6,nfieldr
+      parameter(nfield1= 5*in*jn)
+#ifdef PYHYDRO
+	  parameter(nfield6= 29*in*jn)
+#else
+	  parameter(nfield6= 0)
+#endif
+#ifdef ROTATE
+      parameter(nfield2=  in*jn)
+#else
+      parameter(nfield2 = 0)
+#endif
+#ifdef GRAV
+      parameter(nfield3=  in*jn)
+#else
+      parameter(nfield3 = 0)
+#endif
+#ifdef MHD
+      parameter(nfield4=3*in*jn)
+#else
+      parameter(nfield4 = 0)
+#endif
+#ifdef RAD
+      parameter(nfield5=  in*jn)
+#else
+      parameter(nfield5 = 0)
+#endif
+      parameter(nfieldr = nfield1 + nfield2 + nfield3
+     &                  + nfield4 + nfield5 + nfield6)
+      REAL    rlfldvr(nfieldr)
+      equivalence (rlfldvr(1),d(1,1))
+c-------------------------
+#include "bndry.h"
+      integer nbdryr,nbdryi
+      parameter(nbdryr  = 34*in + 34*jn
+     &         ,nbdryi  =  8*in +  8*jn )
+      REAL    rlbdryvr(nbdryr )
+      integer ntbdryvr(nbdryi )
+      equivalence (rlbdryvr(1),diim1(1)),(ntbdryvr(1),niib(1))
+c-------------------------
+#include "root.h"
+      integer nrootr,nrooti,nrootch
+      parameter(nrootr =  65
+     .        , nrooti = 154
+     .        , nrootch= 98 )
+      REAL    rlrtvr(nrootr)
+      integer ntrtvr(nrooti)
+      character*1 chrtvr(nrootch)
+      equivalence (rlrtvr(1),b1floor) , (ntrtvr(1),ifsen)
+     .          , (chrtvr(1),hdffile)
+c-------------------------
+#include "gravity.h"
+      integer ngravr,ngravi
+      parameter(ngravr = 7, ngravi = 10)
+      REAL    rlgrvvr(ngravr)
+      integer ntgrvvr(ngravi)
+      equivalence (rlgrvvr(1),g) , (ntgrvvr(1),izero)
+c-------------------------
+c\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\////////////////////////////////
+c=======================================================================
+c
+      open(unit=4,file=filename,status='unknown',form='unformatted')
+      write(4)  rl grd  vr , nt grd  vr
+     &         ,rl fld  vr 
+     &         ,rl bdry vr , nt bdry vr
+     &         ,rl rt   vr , nt rt   vr , ch rt   vr
+     &         ,rl grv  vr , nt grv  vr
+      write(2,"(/1x,'restart dump written at time=',1pe12.5,
+     & ' cycle=',i6)") time,nhy
+      close(unit=4)
+      return
+c
+c-----------------------------  MGET  ----------------------------------
+c
+      entry mget(filename)
+      open(unit=4,file=filename,status='old',form='unformatted')
+      read(4)   rl grd  vr , nt grd  vr
+     &         ,rl fld  vr
+     &         ,rl bdry vr , nt bdry vr
+     &         ,rl rt   vr , nt rt   vr , ch rt   vr
+     &         ,rl grv  vr , nt grv  vr
+      close(unit=4)
+c
+      return
+      end

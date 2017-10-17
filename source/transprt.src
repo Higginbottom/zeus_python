@@ -1,0 +1,123 @@
+#include "zeus2d.def"
+c=======================================================================
+c/////////////////////////  SUBROUTINE TRANSPRT  \\\\\\\\\\\\\\\\\\\\\\\
+c
+      subroutine transprt
+c
+c  PURPOSE: This subroutine transports the field variables through the
+c  mesh in an unsymmetric directionally split manner. In each succesive
+c  call to transport, the order of the directions is reversed (resulting
+c  in ...XY...YX...XY...YX...).  This MAY be better than the unsymmetric
+c  operator alone (which itself is better than unsplit schemes, or
+c  symmetric operators at lower resolutions) (Hawley & Finn 1988).
+c  Momenta are computed from velocities in VTOS and then transported.
+c  Velocities are not updated until the end of the transport step in
+c  STOV.  Transport of the magnetic field components b1 and b2 is
+c  accomplished in CT, using the constrained transport scheme of Evans 
+c  & Hawley (1988).  The unconstrained b3 is transported in TRANX*.
+c  Note the order in which variables are transported is important
+c  (especially d).
+c
+c  EXTERNALS: CT    [X1INTFC,X2INTFC]
+c             VTOS
+c             TRANX1[X1INTZC]
+c             MOM X1[X1INTZC,X1INTFC]
+c             TRANX2[X2INTZC]
+c             MOM X2[X2INTZC,X2INTFC]
+c             STOV
+c             BVALD,BVALE
+c             BVALV1,BVALV2,BVALV3
+c             BVALB3
+c             BVALER,BVALFR1,BVALFR2
+c
+c  LOCALS:
+c   s1,s2,s3 = momentum densities in the 1-,2- and 3-directions
+c   mflx1,mflx2 = mass fluxes in the 1- and 2-directions (share storage)
+c  These are stored in work arrays wa...wd, which cannot be used again
+c  until the end of the transport step.
+c-----------------------------------------------------------------------
+      implicit NONE
+#include "param.h"
+#include "root.h"
+#include "scratch.h"
+      REAL s1(in,jn),s2(in,jn),s3(in,jn),mflx1(in,jn),mflx2(in,jn)
+      equivalence (s1,wa),(s2,wb),(s3,wc),(mflx1,mflx2,wd)
+c
+      external vtos,tranx1,momx1,tranx2,momx2,stov,bvald,bvale
+     .        ,bvalv1,bvalv2
+#ifdef ROTATE
+      external bvalv3
+#endif
+#ifdef MHD
+      external ct,bvalb3
+#endif
+#ifdef RAD
+      external bvaler
+#endif
+c\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\////////////////////////////////////
+c=======================================================================
+c  Transport 1- and 2-components of B using CT scheme
+c
+#ifdef MHD
+      call ct
+#endif
+c
+c  construct momentum densities from velocities
+c
+      call vtos(s1,s2,s3)
+c
+c  directional split in X1-X2 fashion
+c
+      if (ix1x2 .eq. 1) then
+c
+        call tranx1(mflx1,s3)
+        call mom x1(mflx1,s1,s2)
+        call bvald
+        call bvale
+#ifdef MHD
+        call bvalb3
+#endif
+#ifdef RAD
+        call bvaler
+#endif
+c
+        call tranx2(mflx2,s3)
+        call mom x2(mflx2,s1,s2)
+	ix1x2 = 2
+c
+c  directional split in X2-X1 fashion
+c
+      else
+        call tranx2(mflx2,s3)
+        call mom x2(mflx2,s1,s2)
+        call bvald
+        call bvale
+#ifdef MHD
+        call bvalb3
+#endif
+#ifdef RAD
+        call bvaler
+#endif
+        call tranx1(mflx1,s3)
+        call mom x1(mflx1,s1,s2)
+        ix1x2 = 1
+      endif
+c
+c  velocities from momentum densities, and update boundaries
+c
+      call stov(s1,s2,s3)
+      call bvald
+      call bvale
+      call bvalv1
+      call bvalv2
+#ifdef ROTATE
+      call bvalv3
+#endif
+#ifdef MHD
+      call bvalb3
+#endif
+#ifdef RAD
+      call bvaler
+#endif
+      return
+      end

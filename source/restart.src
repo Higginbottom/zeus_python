@@ -1,0 +1,314 @@
+#include "zeus2d.def"
+c=======================================================================
+c////////////////////////  SUBROUTINE RESTART  \\\\\\\\\\\\\\\\\\\\\\\\\
+c
+      subroutine restart
+c
+c  PURPOSE:  Sets up restarted run
+c
+c  EXTERNALS:
+c     PROBRES -- macroname which is defined to be the user-supplied
+c                subroutine name which re-initializes user-defined
+c                variables for the problem to be restarted.
+c                PROBRES is undefined by default for backward 
+c                compatiability with earlier versions of ZEUS-2D.
+c     nudt    -- computes timestep
+c
+c  LOCALS:
+c-----------------------------------------------------------------------
+      implicit NONE
+#include "cons.h"
+#include "param.h"
+#include "root.h"
+#include "gravity.h"
+#include "diskw.h"
+#include "zeus_python.h"
+
+      REAL     dtrat
+      external nudt
+	  external hc_file_input
+      namelist /pcon/ nlim,tlim
+      namelist /pgen/ d0,v10,v20,v30,dindex,mdot,tx,lx,mu
+	  integer stat
+
+
+#ifdef PROBRES
+
+
+
+c
+#include "grid.h"
+#include "field.h"
+#include "bndry.h"
+#include "scratch.h"
+c#include "gravity.h"
+#include "radiation.h"
+c
+      external PROBRES
+c
+      namelist /hycon/
+     &  qcon,qlin,courno,dtrat
+     & ,iordd,iorde,iords1,iords2,iords3,iordb1,iordb2,iordb3,iorder
+     & ,istpd,istpe,istps1,istps2,istps3,istpb1,istpb2,istpb3,istper
+     & ,dfloor,efloor,v1floor,v2floor,v3floor,emffloor
+     & ,b1floor,b2floor,b3floor,erfloor
+      integer  nbl,igrid
+      REAL     x1min,x1max,x1rat,dx1min
+     &        ,x2min,x2max,x2rat,dx2min
+      logical  lgrid
+c
+      namelist /ggen1/ nbl,x1min,x1max,igrid,x1rat,dx1min,lgrid
+      namelist /ggen2/ nbl,x2min,x2max,igrid,x2rat,dx2min,lgrid
+c
+      namelist /iib/ ii, niib, miib, liib, b3iib
+     &,  diim1,  eiim1, v1ii  , v2iim1, v3iim1, b3iim1, emfii
+     &,  diim2,  eiim2, v1iim1, v2iim2, v3iim2, b3iim2, emfiim1, emfiim2
+     &, eriim1, eriim2
+      namelist /oib/ io, noib, moib, loib, b3oib
+     &,  diop1,  eiop1, v1iop1, v2iop1, v3iop1, b3iop1, emfiop1
+     &,  diop2,  eiop2, v1iop2, v2iop2, v3iop2, b3iop2, emfiop2, emfiop3
+     &, eriop1, eriop2
+      namelist /ijb/     nijb, mijb, lijb, b3ijb
+     &,  djim1,  ejim1, v1jim1, v2ji  , v3jim1, b3jim1, emfji
+     &,  djim2,  ejim2, v1jim2, v2jim1, v3jim2, b3jim2, emfjim1, emfjim2
+     &, erjim1, erjim2
+      namelist /ojb/     nojb, mojb, lojb, b3ojb
+     &,  djop1,  ejop1, v1jop1, v2jop1, v3jop1, b3jop1, emfjop1
+     &,  djop2,  ejop2, v1jop2, v2jop2, v3jop2, b3jop2, emfjop2, emfjop3
+     &, erjop1, erjop2
+      namelist /grvcon/ isymm,g,ptmass,izero,igriib,igroib,igrijb,igrojb
+     &                 ,epsgrv,maxgrv,ks0grv,phibverr,phibvnmx,graverr
+      namelist /radcon/ c,ifld,epsme,demax,dermax,dtotmax,nmeiter,radth
+     &, epsrad,maxrad,ks0rad,iorad
+      namelist /eqos/ gamma, ciso
+      namelist /gcon/ x1fac,x2fac,igcon
+c
+#endif
+c=======================================================================
+c\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\///////////////////////////////////
+c
+c------------------------  PROB CONTROL  -------------------------------
+c
+c   nlim   = cycles to run
+c   tlim   = physical (problem) time to stop calculation
+c
+      rewind 1
+      read (1,pcon)
+      write(2,pcon)
+
+c
+c  read parameters from input deck
+c
+      read (1,pgen)
+      write(2,pgen)
+	  
+	  
+#ifdef PYHYDRO
+	  	call input_lookup
+		print *,"We will read in heating and cooling data here I think"
+		call hc_file_input
+#endif
+		rewind 1
+
+#ifdef PROBRES
+c
+c------------------------  HYDRO CONTROL  ------------------------------
+c
+c  qcon   = quadratic artificial viscosity (q) constant
+c  qlin   = linear    artificial viscosity (q) constant
+c  courno = courant number
+c  dtrat  = ratio of initial dt to dtmin (used to compute dtmin below)
+c  iord** = order of advection scheme to be used for variable **
+c  iostp**= steepening flag for 3rd order advection.  When istp**=1,
+c           use the discontinuity detection to steepen shocks during
+c           interpolation for variable ** in X1INT,X1INTFC,X2INT,X2INTFC
+c  **floor = smallest value desired for variable ** on grid
+c
+      read (1,hycon)
+      write(2,hycon)
+c
+c-------------------------  READ GRID NAMELISTS  -----------------------
+c
+c  Read in blocks of x1 grid zones.  Note we loop over read statement
+c  until all blocks are read (signalled by reading in lgrid = .true.).
+c  We can zone within each block completely independently of the others,
+c  however we must ensure the starting position of one block (x1min) is
+c  the same as the ending position (x1max) of the previous.
+c   nbl    is number of active zones in block read in
+c   x1min  is x1a(imin) ; bottom position of block
+c   x1max  is x1a(imax) ; top    position of block
+c   igrid  selects zoning type; we solve the zoning equation:
+c            x1max = x1min + SUM OVER N[dx1min*x1rat**n]  ; so we must 
+c          input either dx1min or x1rat (the other is calculated)
+c     igrid = 1 uses input ratios          => x1rat  = dx1a(i+1)/dx1a(i)
+c     igrid = 2 uses input inner zone size => dx1min = dx1a(imin)
+c   lgrid  logical flag for additional blocks ( =.true. reads another)
+c   imax,imin  are indices of top and bottom of block
+c
+      lgrid = .false.
+10    continue
+      read (1,ggen1)
+      write(2,ggen1)
+      if (.not. lgrid) go to 10
+c
+      lgrid =.false.
+110   continue
+      read (1,ggen2)
+      write(2,ggen2)
+      if (.not. lgrid) go to 110
+c
+c------------------------  BOUNDARY CONTROL ----------------------------
+c
+c  The following points describe how boundaries are handled:
+c
+c*1)  We may specify any of 4 fluid boundary conditions independently at
+c  every zone on the problem boundary.  The problem i boundaries may be
+c  irregular to treat steps and cavities (resulting in irregular j
+c  boundaries as well).
+c     ii(j) is  i  index of first active zone for sweep  j
+c     io(j) is  i  index of last  active zone for sweep  j
+c     ji(i) is  j  index of first active zone for sweep  i # calculated
+c     jo(i) is  j  index of last  active zone for sweep  i # from ii,io
+c  The boundary type is specified by nflo, where
+c     nflo = 1   reflecting
+c          =-1   reflecting with inversion of 3-velocity
+c          = 2   flow out 
+c          = 3   flow in 
+c          = 4   periodic
+c   then,    niib(j) is nflo of inner i boundary on sweep j
+c            noib(j) is nflo of outer i boundary on sweep j
+c            nijb(i) is nflo of inner j boundary on sweep i
+c            nojb(i) is nflo of outer j boundary on sweep i
+c
+c*2) Since the mhd boundary types may differ from the fluid boundary
+c  types, we may specify the former independently of the latter.  Thus,
+c  the mhd boundary types are specified by mflo,where
+c     mflo = 1   reflecting
+c          =-1   reflecting with inversion of 3-magnetic field
+c          = 2   flow out
+c          = 3   flow in
+c          = 4   periodic
+c  Values for mflo are stored in miib,moib,mijb,mojb.
+c
+c*3) Since the radiation boundary types may differ from both the fluid
+c  and mhd boundary types,we may specify the former independent of the
+c  others.  The boundary flag values follow the above conventions.
+c
+c*4) To be completely general, we allow the boundary flag for each
+c  variable to be set independent of all others.  This can be done by
+c  setting values for the flags in the namelists, eg:
+c   diib,doib,dijb,dojb = flags on boundaries for d
+c  If no values are input for each individual variable, then the flags
+c  are initialized using the values for nflo,mflo above.
+c
+c*5) For flow in boundaries, boundary values of d,e,v1,v2,[v3],...
+c  must be input, for example:
+c      diim1(j) is inner i boundary density for sweep j at iim1(j)
+c      diim2(j) is inner i boundary density for sweep j at iim2(j)
+c      diop1(j) is outer i boundary density for sweep j
+c      djim1(i) is inner j boundary density for sweep i
+c      djop1(i) is outer j boundary density for sweep i
+c
+c*6) Since the corner zones [(ii-1,ji-1),(io+1,ji-1),etc] are set across
+c  the ijb or ojb, then all i boundary values must be specified for
+c  j=js,je and all j boundary values must be specified for i=is-2,ie+2
+c
+c  set boundaries, order is iib, oib, ijb, ojb
+c
+      read (1,iib)
+      write(2,iib)
+c
+      read (1,oib)
+      write(2,oib)
+c
+      read (1,ijb)
+      write(2,ijb)
+c
+      read (1,ojb)
+      write(2,ojb)
+c
+c------------------------  GRAVITY CONTROL  ----------------------------
+c
+c  Gravitational self-potentials can be included in both 1-D and 2-D
+c  problems by solving the Poisson equation in the GRAVITY module.
+c  Point mass potentials are included directly in the momentum eqn
+c  by using a non-zero value for the variable ptmass.  Point mass
+c  potentials do not require defining GRAV, do not call the GRAVITY
+c  module, and are not included in the array phi but are explicitely
+c  added to the momentum eqn terms in the routines STV1 and STV2.
+c     g      = gravitational constant
+c     ptmass = fixed central point mass object
+c     izero  = i index of Z=0 (x1=0) for odd symmetry case
+c              (cylindrical geometry only)
+c     igrijb = ijb flag (0 for     symmetric (Dirichlet) boundary      )
+c                       (1 for non-symmetric             boundary whose
+c                        value is calculated using multipole expansion )
+c     igrojb = ojb flag ("  "      "          "         "              )
+c     epsgrv = error limit              for ICCGAF
+c     maxgrv = maximum iteration count  for ICCGAF
+c     ks0grv = level of cyclic reduction in ICCGAF
+c     phibverr = error criteria for multipole moments in PHIBV
+c     phibvnmx = max number of moments to be taken in PHIBV
+c      graverr = error criteria for computing a soln in GRAVITY
+c
+      read (1,grvcon)
+      write(2,grvcon)
+c
+c------------------------  RADIATION CONTROL  --------------------------
+c
+c   c      = speed of light
+c   ifld   = choice of flux limiters
+c   epsme  = error criterion for NR convergence (WH80s uses 1.0e-5)
+c demax,dermax = max relative change allowed in e,er in a single NR iter
+c   dtotmax= max total relative change allowed over all NR iterations
+c   nmeiter= max number of NR iterations allowed (WH80s uses 20)
+c   radth  = "theta" time centering parameter
+c     epsrad = error limit              for ICCGAF
+c     maxrad = maximum iteration count  for ICCGAF
+c     ks0rad = level of cyclic reduction in ICCGAF
+c   iorad = 1 to dump convergence data for NR iterations
+c
+      read (1,radcon)
+      write(2,radcon)
+c
+c------------------------  EQUATION OF STATE  --------------------------
+c
+c      gamma = ratio of specific heats
+c      ciso  = isothermal sound speed
+c
+      read (1,eqos)
+      write(2,eqos)
+c
+c-------------------------  PROBLEM RESTART  ---------------------------
+c
+c  PROBRES is a user defined cpp macroname representing a subroutine
+c  which re-intializes all user-defined variables for the particular 
+c  problem to be restarted.  PROBRES should re-initialize only the
+c  variables defined by the user in PROBLEM which are not in any
+c  ZEUS-2D common blocks and are therefore not saved in the restart
+c  dump.  PROBRES must read the same namelist(s) as PROBLEM.
+c
+      call PROBRES
+c
+c-------------------------  GRID MOTION CONTROL  -----------------------
+c
+c        igcon = 1 and x1fac < 0 gives "lagrangian" tracking in x1 lines
+c        igcon = 1 and x2fac < 0 gives "lagrangian" tracking in x2 lines
+c        igcon = 2 for input grid boundary speeds
+c                vg1(io) = x1fac * central soundspeed
+c                vg2(jo) = x2fac * central soundspeed
+c        igcon = 3 for constant motion at x1[2]fac
+c
+      read (1,gcon)
+      write(2,gcon)
+#endif
+c
+c----------------------  COMPUTE TIMESTEP  -----------------------------
+
+
+
+
+      call nudt
+c
+      return
+      end

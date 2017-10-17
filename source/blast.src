@@ -1,0 +1,169 @@
+#include "zeus2d.def"
+c=====================================================================
+c///////////////////////  SUBROUTINE BLAST \\\\\\\\\\\\\\\\\\\\\\\\\\\
+c
+      subroutine blast
+c
+c  INPUTS A SPHERICAL EXPLOSION IN A MAGNETIZED MEDIUM
+c
+c     written by: Mike Norman
+c     date:       March 1991
+c     modified1:  June 1993 for zeus2d_v2.0
+c
+c  PURPOSE: establish a high pressure bubble at the origin of specified
+c           parameters in either cylindrical or spherical coordinates.
+c
+c  INPUT PARAMETERS:
+c   i[j]stop = i[j] index of domain containing bubble
+c   radius   = radius (x2 length) of bubble [pc]
+c   n0       = ambient number density [cm-3]
+c   T0       = ambient temperature [K]
+c   b0       = ambient magnetic field strength [muG]
+c   Msn      = supernova mass ejected [solar masses]
+c   Esn      = supernova explosion energy [erg]
+c
+c  LOCALS:
+c   d0       = ambient mass density
+c   e0       = ambient energy density
+c   db       = bubble mass density
+c   eb       = bubble energy density
+c----------------------------------------------------------------------
+      implicit NONE
+#include "cons.h"
+#include "param.h"
+#include "grid.h"
+#include "field.h"
+#include "root.h"
+#include "scratch.h"
+      integer i,j
+      REAL ro,mask,rh,rb,r,aphi(in,jn)
+      REAL r2ip1,r2i
+      equivalence (wa,aphi)
+c
+      integer istop,jstop
+      REAL  radius,n0,T0,b0,Msn,Esn,d0,e0,db,eb,mu
+      data mu /0.63/
+c\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\///////////////////////////////////////
+c=======================================================================
+c
+      namelist /pgen/ istop,jstop,radius,n0,T0,b0,Msn,Esn
+c
+c  defaults
+      istop = 20
+      jstop = 20
+c
+c  read parameters from input deck
+c
+      read (1,pgen)
+      write(2,pgen)
+c
+c  compute parameters in cgs
+c
+      radius= radius * cmpc
+      d0    = n0 * mh
+      e0    = boltz / (mu*mh*(gamma-1.)) * d0 * T0
+      b0    = b0 / sqrt(4.*pi)
+      db    = Msn * msol / (4./3.*pi*radius**3)
+      eb    = Esn / (4./3.*pi*radius**3)
+c
+c  setup d and e over whole grid
+c
+      do 20 j=js,je
+        do 10 i=ii(j),io(j)
+          d(i,j) = d0
+          e(i,j) = e0
+10      continue
+20    continue
+c
+c  reset d and e inside bubble using mask array
+c
+      ro = radius**2
+      do 40 j=js,jstop
+        do 30 i=ii(j),istop
+#ifdef RZ
+          r2ip1 = ((x1a(i+1))**2 + x2a(j+1)**2)
+          r2i   = ((x1a(i  ))**2 + x2a(j  )**2)
+#endif
+#ifdef RT
+          r2ip1 = x1a(i+1)**2
+          r2i   = x1a(i  )**2
+#endif
+          if (r2i   .gt. ro) goto 40
+          if (r2ip1 .gt. ro) then
+            mask = (ro - r2i)/(r2ip1 - r2i)
+          else
+            mask = 1.0
+          endif
+          d(i,j) = (1.0-mask)*d(i,j) + mask*db
+          e(i,j) = (1.0-mask)*e(i,j) + mask*eb
+30      continue
+40    continue
+#ifdef MHD
+c
+c  Initialize magnetic field using vector potential
+c  Note field is zero in source region.
+c
+      rh = dx1b(istop)
+      ro = radius
+      do 60 i=is,ie+1
+        do 50 j=js,je+1
+#ifdef RZ
+          rb = x2a(j)
+          r  = sqrt(x1a(i)**2 + x2a(j)**2)
+#endif
+#ifdef RT
+          rb = x1a(i)*sin(x2a(j))
+          r  = x1a(i)
+#endif
+          aphi(i,j) = .5*b0*rb/(exp((ro - r)/rh) + 1.0)
+50      continue
+60    continue
+c
+      do 90 j=js,je
+        do 70 i=iip1(j),io(j)   
+          b1(i,j) = (g32a(j+1)*aphi(i,j+1)
+     .             - g32a(j  )*aphi(i,j  ))/(g2a(i)*dvl2a(j))
+70      continue
+#ifdef RZ
+        b1(ii  (j),j) = b1(iip1(j),j)
+        b1(iim1(j),j) = b1(iip1(j),j)
+        b1(iop1(j),j) = b1(io  (j),j)
+        b1(iop2(j),j) = b1(io  (j),j)
+#endif
+        do 80 i=iim1(j),iop2(j)
+          if (abs(b1(i,j)) .lt. tiny) b1(i,j) = tiny
+80      continue
+90    continue
+      do 100 i=is-1,ie+2
+        b1(i,jim1(i)) = b1(i,ji  (i))
+        b1(i,jim2(i)) = b1(i,jip1(i))
+        b1(i,jop1(i)) = b1(i,jo  (i))
+        b1(i,jop2(i)) = b1(i,jom1(i))
+100   continue
+c
+      do 130 i=is,ie
+        do 110 j=jip1(i),jo(i)
+          b2(i,j) = -(g31a(i+1)*aphi(i+1,j)
+     .              - g31a(i  )*aphi(i  ,j))/(g31b(i)*dx1a(i))
+110     continue
+#ifdef RZ
+        b2(i,ji  (i)) = 0.0
+        b2(i,jim1(i)) = -b2(i,jip1(i))
+        b2(i,jop1(i)) =  b2(i,jo  (i))
+        b2(i,jop2(i)) =  b2(i,jo  (i))
+#endif
+        do 120 j=jip1(i),jop1(i)
+          if (abs(b2(i,j)) .lt. tiny) b2(i,j) = tiny
+120     continue
+130   continue
+      do 140 j=js-1,je+2
+        b2(iim1(j),j) = -b2(ii  (j),j)
+        b2(iim2(j),j) = -b2(iip1(j),j)
+        b2(iop1(j),j) =  b2(io  (j),j)
+        b2(iop2(j),j) =  b2(iom1(j),j)
+140   continue
+#endif
+c
+      return
+      end
+

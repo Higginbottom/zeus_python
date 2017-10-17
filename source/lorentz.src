@@ -1,0 +1,189 @@
+#include "zeus2d.def"
+c=======================================================================
+c/////////////////////////  SUBROUTINE LORENTZ  \\\\\\\\\\\\\\\\\\\\\\\\
+c
+      subroutine lorentz
+#ifdef MHD
+c
+c  PURPOSE: Computes the lorentz force terms associated with alfven
+c  waves in the equation of motion.  Upwind differencing along
+c  characteristics is used for accuracy.
+c
+c  EXTERNALS: X1INTZC, X2INTZC
+c
+c  LOCALS:
+c-----------------------------------------------------------------------
+      implicit NONE
+#include "param.h"
+#include "grid.h"
+#include "field.h"
+#include "root.h"
+#include "bndry.h"
+#include "scratch.h"
+      integer i,j,ilower
+      REAL one
+      REAL vm(ijn),vp(ijn),tv(ijn),tb(ijn)
+     &    ,v2m(in),b2m(in),v2p(in),b2p(in)
+     &    ,v1m(jn),b1m(jn),v1p(jn),b1p(jn)
+     &    ,b2star(in,jn),b1star(in,jn),sgn,sdp,sdm
+      equivalence
+     & (vp ,wij1),(vm ,wij2),(tv ,wij4),(tb ,wij5)
+     &,(v2m,wi 0),(b2m,wi 1),(v2p,wi 2),(b2p,wi 3)
+     &,(v1m,wj 0),(b1m,wj 1),(v1p,wj 2),(b1p,wj 3)
+     &,(b2star,wa),(b1star,wb)
+c
+      external x1intzc,x2intzc,bvalv1,bvalv2
+c\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\//////////////////////////////////
+c=======================================================================
+c
+      one = 1.0
+c
+c  Start with MoC calculation of v2* and b2*
+c
+      do 100 j=js,je+1
+        do 10 i=ii(j),iop1(j)
+          vp(i) = 0.5*abs(b1(i,j)+b1(i,j-1))
+     &      /sqrt(0.25*(d(i-1,j)+d(i-1,j-1)+d(i,j)+d(i,j-1)))
+          vm(i) = -vp(i)
+10      continue
+        do 20 i=iim2(j),iop2(j)
+          tv(i) = v2(i,j)-vg2(j)
+          tb(i) = b2(i,j)
+20      continue
+        call x1intzc(tv,vm,wi0,j,iords2,0,v2m)
+        call x1intzc(tb,vm,wi0,j,iordb2,0,b2m)
+        call x1intzc(tv,vp,wi0,j,iords2,0,v2p)
+        call x1intzc(tb,vp,wi0,j,iordb2,0,b2p)
+c
+	if (miib(j) .eq. 1 .or. miib(j).eq.-1) then
+          v2p(ii  (j)) = v2m(ii  (j))
+          b2p(ii  (j)) = b2m(ii  (j))
+	endif
+	if (miib(j) .eq. 2) then
+          v2p(ii  (j)) = v2m(ii  (j))
+          b2p(ii  (j)) = b2m(ii  (j))
+	endif
+	if (miib(j) .eq. 4) then
+          v2p(ii  (j)) = v2p(iop1(j))
+          b2p(ii  (j)) = b2p(iop1(j))
+	endif
+	if (miib(j) .eq. 5) then
+          v2p(ii  (j)) = v2m(ii  (j))
+          b2p(ii  (j)) =-b2m(ii  (j))
+	endif
+c
+	if (moib(j) .eq. 1 .or. moib(j).eq.-1) then
+          v2m(iop1(j)) = v2p(iop1(j))
+          b2m(iop1(j)) = b2p(iop1(j))
+	endif
+	if (moib(j) .eq. 2) then
+          v2m(iop1(j)) = v2p(iop1(j))
+          b2m(iop1(j)) = b2p(iop1(j))
+	endif
+	if (moib(j) .eq. 4) then
+          v2m(iop1(j)) = v2m(ii  (j))
+          b2m(iop1(j)) = b2m(ii  (j))
+	endif
+	if (moib(j) .eq. 5) then
+          v2m(iop1(j)) = v2p(iop1(j))
+          b2m(iop1(j)) =-b2p(iop1(j))
+	endif
+c
+        do 30 i=ii(j),iop1(j)
+          sgn = sign(one,(b1(i,j)+b1(i,j-1)))
+          sdm = sqrt(0.5*(d(i  ,j)+d(i  ,j-1)))
+          sdp = sqrt(0.5*(d(i-1,j)+d(i-1,j-1)))
+          b2star(i,j) = sgn*(b2m(i)/sdm + b2p(i)/sdp) + (v2m(i)-v2p(i))
+          b2star(i,j) = sgn*b2star(i,j)/(1.0/sdp + 1.0/sdm)
+30      continue
+100   continue
+c
+c  Now do MoC calculation of v1* and b1*
+c  Trap needed in RT at r=0
+c
+      ilower = is
+#ifdef RT
+      if (g2a(js) .eq. 0.0) ilower = is+1
+#endif
+      do 200 i=ilower,ie+1
+        do 110 j=ji(i),jop1(i)
+	  vp(j) = 0.5*abs(b2(i,j)+b2(i-1,j))
+     &     /sqrt(0.25*(d(i,j-1)+d(i-1,j-1)+d(i,j)+d(i-1,j)))
+          vm(j) =  -vp(j)
+110     continue
+        do 120 j=jim2(i),jop2(i)
+          tv(j) = v1(i,j)-vg1(i)
+          tb(j) = b1(i,j)
+120     continue
+        call x2intzc(tv,vm,wj0,i,g2a,iords1,0,v1m)
+        call x2intzc(tb,vm,wj0,i,g2a,iordb1,0,b1m)
+        call x2intzc(tv,vp,wj0,i,g2a,iords1,0,v1p)
+        call x2intzc(tb,vp,wj0,i,g2a,iordb1,0,b1p)
+c
+	if (mijb(i) .eq. 1 .or. mijb(i).eq.-1) then
+          v1p(ji  (i)) = v1m(ji  (i))
+          b1p(ji  (i)) = b1m(ji  (i))
+	endif
+	if (mijb(i) .eq. 2) then
+          v1p(ji  (i)) = v1m(ji  (i))
+          b1p(ji  (i)) = b1m(ji  (i))
+	endif
+	if (mijb(i) .eq. 4) then
+          v1p(ji  (i)) = v1p(jop1(i))
+          b1p(ji  (i)) = b1p(jop1(i))
+	endif
+	if (mijb(i) .eq. 5) then
+          v1p(ji  (i)) = v1m(ji  (i))
+          b1p(ji  (i)) =-b1m(ji  (i))
+	endif
+c
+	if (mojb(i) .eq. 1 .or. mojb(i).eq.-1) then
+          v1m(jop1(i)) = v1p(jop1(i))
+          b1m(jop1(i)) = b1p(jop1(i))
+	endif
+	if (mojb(i) .eq. 2) then
+          v1m(jop1(i)) = v1p(jop1(i))
+          b1m(jop1(i)) = b1p(jop1(i))
+	endif
+	if (mojb(i) .eq. 4) then
+          v1m(jop1(i)) = v1m(ji  (i))
+          b1m(jop1(i)) = b1m(ji  (i))
+	endif
+	if (mojb(i) .eq. 5) then
+          v1m(jop1(i)) = v1p(jop1(i))
+          b1m(jop1(i)) =-b1p(jop1(i))
+	endif
+c
+        do 130 j=ji(i),jop1(i)
+          sgn = sign(one,(b2(i,j)+b2(i-1,j)))
+          sdm = sqrt(0.5*(d(i,j  )+d(i-1,j  )))
+          sdp = sqrt(0.5*(d(i,j-1)+d(i-1,j-1)))
+          b1star(i,j) = sgn*(b1m(j)/sdm + b1p(j)/sdp) + (v1m(j)-v1p(j))
+          b1star(i,j) = sgn*b1star(i,j)/(1.0/sdp + 1.0/sdm)
+130     continue
+200   continue
+c
+c  Evolve v1 and v2 using b1* and b2* from MoC calculation above
+c
+      do 310 j=js,je
+        do 300 i=iip1(j),io(j)
+          vm(i) = 0.25*(b2(i,j)+b2(i,j+1)+b2(i-1,j)+b2(i-1,j+1))
+     &                *2.0/(d(i,j)+d(i-1,j))
+          v1(i,j) = v1(i,j) + dt*vm(i)*
+     &      (b1star(i,j+1)-b1star(i,j))/(g2a(i)*dx2a(j))
+300     continue
+310   continue
+      call bvalv1
+c
+      do 330 i=is,ie
+        do 320 j=jip1(i),jo(i)
+          vm(j) = 0.25*(b1(i,j)+b1(i+1,j)+b1(i,j-1)+b1(i+1,j-1))
+     &                *2.0/(d(i,j)+d(i,j-1))
+          v2(i,j) = v2(i,j) + dt*vm(j)*
+     &     (g2a(i+1)*b2star(i+1,j)-g2a(i)*b2star(i,j))/(g2b(i)*dx1a(i))
+320     continue
+330   continue
+      call bvalv2
+#endif
+      return
+      end

@@ -1,0 +1,191 @@
+#include "zeus2d.def"
+c=====================================================================
+c///////////////////////  SUBROUTINE DISKW \\\\\\\\\\\\\\\\\\\\\\\\\\\
+c
+      subroutine diskw      
+c
+c  INPUTS SIMPLE ICs for a thermally expanding disk (a la Font et al. 2004
+c                   see also PSD98
+c
+c     written by: Daniel Proga
+c     date:       June 2009
+c     modified1:  
+c
+c  PURPOSE: test the code
+c           
+c
+c  INPUT PARAMETERS:
+c   d0       = the mass density at the base of the atmosphere
+c   temp0    = the gas temperature at the base of the atmosphere
+c
+c  LOCALS:
+
+c   e0       = the energy density at the base of the atmosphere
+c----------------------------------------------------------------------
+      implicit NONE
+#include "cons.h"
+#include "param.h"
+#include "grid.h"
+#include "field.h"
+#include "root.h"
+#include "scratch.h"
+#include "gravity.h"
+#include "bndry.h"
+#include "diskw.h"
+#include "zeus_python.h"
+
+
+      integer i,j,iprob,stat
+      real*8 e0,csound,cisosqrd
+      real*8 ric,temp
+      external bvalv1,bvalv2,bvalv3,bvald,bvale
+c
+
+c\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\///////////////////////////////////////
+c=======================================================================
+c
+      namelist /pgen/ d0,v10,v20,v30, dindex,mdot,tx,lx,mu,kappa_x
+	  namelist /hc_pre/ comp_pre0,line_pre0,brem_pre0,xray_pre0
+c
+c  read parameters from input deck
+c
+      read (1,pgen)
+      write(2,pgen)
+	  read (1,hc_pre)
+	  write(2,hc_pre)
+
+c
+#ifdef PYHYDRO
+      call input_lookup 
+#endif
+c
+c  setup d, e and vel. over whole grid
+c
+
+c iprob =1 spherical wind problem 
+
+
+      iprob=1
+      if (iprob.eq.1) then   
+	      ric=48.246764e10
+c
+c  Initialize density and velocity variables
+c
+
+       print *,js,je,is,ie,d0,dindex,ciso,ptmass,guniv,sb,mdot
+
+
+        do  j=js,je
+         do i=is,ie
+c			 print *,comp_pre0,xray_pre0,line_pre0,brem_pre0
+			 comp_c_pre(i,j)=comp_pre0
+			 comp_h_pre(i,j)=comp_pre0
+			 xray_pre(i,j)=xray_pre0
+			 line_pre(i,j)=line_pre0
+			 brem_pre(i,j)=brem_pre0
+			 
+			 
+		v1(i,j)=v10
+	  	v2(i,j)=v20
+	  	v3(i,j)=sqrt((guniv*ptmass*sin(x2b(j))*sin(x2b(j)))/x1b(i))
+c	d(i,j)=d0*1e-4
+
+
+c            d(i,j)=dmax1(d0*1e-4,            
+c     &      d0*x1b(i)**(-dindex)*exp(1./(ciso*ciso)/
+c     &      x1b(i)*(1.-1./2./sin(x2b(j)))))
+	temp=((3.0*ptmass*mdot*guniv)/  (8.0*pi*sb*
+     &   (x1b(i)*sin(x2b(j)))**3.0) )**0.25
+	 if (temp.lt.lu_temp(1)) then
+		 temp=lu_temp(1)
+	 endif
+	 d(i,j)=1e-24
+	cisosqrd=1.66666*boltz*temp/mp
+c	if (x1b(i).lt.2.*ric) then
+       d(i,j)=d0*(x1b(i)/ric)**(-dindex)*
+     & exp((-1.0*guniv*ptmass*(x1b(i)*cos(x2b(j)))**2)/
+     & (cisosqrd*2.0*(x1b(i))**3))
+c      else
+c       d(i,j)=d0*(x1b(i)/ric)**(-dindex)*
+c     &   exp(20.*(1.-(x1b(i)/9.7e11)))*
+c     & exp((-1.0*guniv*ptmass*(x1b(i)*cos(x2b(j)))**2)/
+c     & (cisosqrd*2.0*(x1b(i))**3))	
+	 	  
+c		  
+c       d(i,j)=d0*(x1b(i)/ric)**(-dindex)*1.*
+c     &   exp(20.*(1.-(9.7e11/x1b(i))))
+c     & exp((-1.0*guniv*ptmass*(x1b(i)*cos(x2b(j)))**2)/
+c     & (cisosqrd*2.0*(x1b(i))**3))		  
+c       endif
+		  
+		  
+		  
+c      d(i,j)=1e-22
+c      endif
+c	 d_old(i,j)=d(i,j)
+	 xi(i,j)=(lx/((d(i,j)/(mu*mp))*x1b(i)**2))
+
+	if (d(i,j).le. 1e-22) then
+		d(i,j)=1e-22
+		temp=tx/4.0
+	endif
+         e(i,j)=(3.0*d(i,j)*boltz*temp)/(2.0*mp*mu)
+      	t_old(i,j)=temp
+	     
+
+cc     &      d0*x1b(i)**(-dindex)*exp(-1/(ciso*ciso)/
+cc     &      x1b(i)/tan(x2b(j))/tan(x2b(j))/2))
+  	
+c          d(i,j) =d0*1e-4 
+
+
+c	  v3(i,j)=v30
+	  
+c         if (d(i,j).lt.d0*9e-4) then
+c	  v3(i,j)=v30
+c         else
+c         v3(i,j) = sqrt(1./x1b(i))/sin(x2b(j))
+c         v3(i,j) = sqrt(1./x1b(i)/sin(x2b(j)))
+
+c         endif
+c	print *,i,j,d(i,j),v3(i,j)
+         enddo
+        enddo
+
+
+c Lines after this set boundary conditions that are set each cycle. 
+c  je is the last theta cell, so the lower boundary by the disk.
+
+        do i=is,ie
+			
+         if (dindex.le.-10) then
+          d(i,je) = d0*(2/(x1b(i)**7.5+x1b(i)**12.5))**.2
+          djop1(i)= d0*(2/(x1b(i)**7.5+x1b(i)**12.5))**.2
+         else 
+c          d(i,je) = d0*x1b(i)**(-dindex)
+c			 if (x1b(i).lt.2.*ric) then
+c			 if (x1b(i).lt.2.*ric) then
+          djop1(i) = d(i,je)
+c	  else
+c		  djop1(i)=1e-22
+c	  endif
+c	  endif
+         endif
+c         v3(i,je) = sqrt(1./x1b(i))
+         ejop1(i)=e(i,je)
+		 
+         v3jop1(i)= v3(i,je)
+         v1jop1(i)= v1(i,je)
+       enddo
+
+      endif
+
+      call bvald
+      call bvalv1
+      call bvalv2
+      call bvalv3
+	  call bvale
+
+      return
+      end
+

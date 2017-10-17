@@ -1,0 +1,456 @@
+#include "zeus2d.def"
+c=======================================================================
+c/////////////////////////  SUBROUTINE PHIBV  \\\\\\\\\\\\\\\\\\\\\\\\\\
+c
+      subroutine phibv
+#ifdef GRAV
+c
+c  PURPOSE: Uses a multipole expansion formula to calculate the outer
+c  boundary values of the gravitational potential.  The n'th term in the
+c  expansion is given by:
+c            PHI(n) = Pn(u)*Mn*R**-(n+1)
+c  where  Pn(u) = Legengre polynomial of order n
+c         u     = direction cosine to grid point
+c         R     = position  vector to grid point
+c         Mn    = n'th multipole moment
+c               = INTEGRAL[dVOL*d(R)*R**n*Pn(u)]
+c  Up to nmax terms are added; execution terminates when
+c            PHI(n)/[SUM OVER N-1(PHI(n))] < errphi
+c  Here, "outer" boundaries are those far from the mass distribution.
+c  Outer boundary potentals are calculated if the flags igriib,igroib,
+c  igrijb,and igrojb=1 respectively.  The variable "isymm" is used to
+c  denote problems with odd symmetry (isymm = 1) (no symmetry across
+c  the equatorial plane).  For the even symmetry case (isymm = 0), the
+c  odd moments are identically zero and thus never calculated.
+c
+c  EXTERNALS: [none]
+c
+c  LOCALS:
+c  dm(i,j)    is mass contained in zone i,j
+c  q(i,j,n)   is the n'th Legendre polynomial at point i,j
+c  qm(n)      is the n'th moment
+c  r(i,j,n)   is the position vector to the n'th power at i,j
+c  r**bi(*,n) is the position vector along the ** boundary to the
+c               -ve n'th power
+c  u       is the direction cosine to grid point
+c  Note that distances are scaled by x2b(je) [RZ geometry] or x1b(ie)
+c  [RT geometry] to prevent floating point undeflows/overflows for the
+c  higher moments.  Be aware this may limit the maximum number of
+c  moments possible if the length of the position vector to any
+c  boundary point is greatly different from xscale.
+c-----------------------------------------------------------------------
+      implicit NONE
+#include "param.h"
+#include "grid.h"
+#include "field.h"
+#include "bndry.h"
+#include "root.h"
+#include "scratch.h"
+#include "gravity.h"
+      REAL     errmax
+      integer  nmax,nm2,nm1,n,np1,np2
+      parameter(nm2 = 1, nm1 = 2, n = 1, np1 = 2, np2 = 1)
+c
+      REAL  q  (in,jn,2), r(in,jn,2), dm(in,jn)
+     &     ,r1 (ijn), r2 (ijn)
+     &     ,r1i(ijn), r2i(ijn) , u(ijn)
+     &     ,piib (jn,2),poib (jn,2),pojb (in,2),pijb (in,2)
+     &     ,riibi(jn,2),roibi(jn,2),rojbi(in,2),rijbi(in,2)
+c
+      REAL     xscale,fpg,tpg,rn,qm(2),qa,ephimx,deltphi,errphi
+      integer  i,j,iter
+c
+      equivalence
+     & (q(1,1,1),wa) , (q(1,1,2),wb) , (r(1,1,1),wc) , (r(1,1,2),wd)
+     &,(r1,wij0) , (r2,wij1) , (r1i,wij2) , (r2i,wij3) , (u,wij4)
+     &,(piib (1,1),wj0),(poib (1,1),wj4),(pijb(1,1),wi0),(pojb(1,1),wi4)
+     &,(piib (1,2),wj1),(poib (1,2),wj5),(pijb(1,2),wi1),(pojb(1,2),wi5)
+     &,(riibi(1,1),wj2),(roibi(1,1),wj6) 
+     &,(riibi(1,2),wj3),(roibi(1,2),wj7)
+     &                                ,(rijbi(1,1),wi2),(rojbi(1,1),wi6)
+     &                                ,(rijbi(1,2),wi3),(rojbi(1,2),wi7)
+      equivalence (dm,wcg1)
+c\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\////////////////////////////////////
+c=======================================================================
+c  This routine uses a somewhat twisted way of referencing variables at
+c  each iteration to save computations and assignments.  Thus, at each
+c  iteration we calculate the n'th (even) and n+1'th (odd) terms using
+c  values from the n-2 and n-1 iteration.  Note the n;n-2 are stored in
+c  the same array (overwritten), and the n+1;n-1 in the same array.
+c  The variable "rn" keeps track of the real n value we are working on.
+c
+      nmax = phibvnmx
+      errmax = phibverr
+#ifdef RZ
+      xscale = x2b(je+1)
+#endif
+#ifdef RT
+      xscale = x1b(ie+1)
+#endif
+      tpg = 2.0*pi*g
+      fpg = 2.0*tpg
+      rn  = 0.0
+      qm(n  ) = 0.0
+      qm(np1) = 0.0
+c
+c  Compute the zero order terms in the expansion (always done).  Begin
+c  by getting the zeroth [and first, if needed] multipole moments. 
+c  Note p0(u)=1, p1(u)=u
+c
+      do 30 j=js,je
+        qa = g32b(j)*dx2a(j)
+        do 10 i=ii(j),io(j)
+#ifdef RZ
+          r2(i) = ((x1b(i)-x1a(izero))**2 + x2b(j)**2)/xscale**2
+          r1(i) = sqrt(r2(i))
+          u (i) = (x1b(i)-x1a(izero))/(xscale*r1(i))
+#endif
+#ifdef RT
+          r1(i) = x1b(i)/xscale
+          u (i) = cos(x2b(j))
+#endif
+          q (i,j,n  ) = 1.0
+          q (i,j,np1) = u(i)
+          dm(i,j    ) = qa*g2b(i)*g31b(i)*dx1a(i)*d(i,j)
+          r (i,j,n  ) = 1.0
+          qm(n) = qm(n) + dm(i,j)
+10      continue
+c
+        if (isymm .eq. 1) then
+          do 20 i=ii(j),io(j)
+            r(i,j,np1) = r1(i)
+            qm(np1) = qm(np1) + dm(i,j)*u(i)*r1(i)
+20        continue
+        endif
+30    continue
+c
+      if (isymm .eq. 0) then
+        qm(n  ) = fpg*qm(n  )
+      endif
+      if (isymm .eq. 1) then
+        qm(n  ) = tpg*qm(n  )
+        qm(np1) = tpg*qm(np1)
+      endif
+c
+c  Now compute the zero order terms (n=0 [and n=1 for odd symmetery])
+c  along each boundary, starting with the inner i boundary
+c
+      if (igriib .eq. 1) then
+        do 40 j=js,je
+#ifdef RZ
+          r2 (j) = ((x1b(iim1(j))-x1a(izero))**2 + x2b(j)**2)/xscale**2
+          r2i(j) = 1.0/r2(j)
+          r1i(j) = sqrt(r2i(j))
+          u  (j) = ((x1b(iim1(j))-x1a(izero))/xscale)*r1i(j)
+#endif
+#ifdef RT
+          r1i(j) = x1bi(iim1(j))*xscale
+          r2i(j) = r1i(j)**2
+          u  (j) = cos(x2b(j))
+#endif
+          piib (j,n  ) = 1.0
+          piib (j,np1) = u  (j)
+          riibi(j,np1) = r1i(j)
+          phi(iim1(j),j) = qm(n)*r1i(j)/xscale
+40      continue
+c
+        if (isymm .eq. 1) then
+          do 50 j=js,je
+            riibi(j,np2) = r2i(j)
+            phi(iim1(j),j) = phi(iim1(j),j) + qm(np1)*u(j)*r2i(j)/xscale
+50        continue
+        endif
+      endif
+c
+c  Initial solution along outer i boundary
+c
+      if (igroib .eq. 1) then
+        do 60 j=js,je
+#ifdef RZ
+          r2 (j) = ((x1b(iop1(j))-x1a(izero))**2 + x2b(j)**2)/xscale**2
+          r2i(j) = 1.0/r2(j)
+          r1i(j) = sqrt(r2i(j))
+          u  (j) = ((x1b(iop1(j))-x1a(izero))/xscale)*r1i(j)
+#endif
+#ifdef RT
+          r1i(j) = x1bi(iop1(j))*xscale
+          r2i(j) = r1i(j)**2
+          u  (j) = cos(x2b(j))
+#endif
+          poib (j,n  ) = 1.0
+          poib (j,np1) = u  (j)
+          roibi(j,np1) = r1i(j)
+          phi(iop1(j),j) = qm(n)*r1i(j)/xscale
+60      continue
+c
+        if (isymm .eq. 1) then
+          do 70 j=js,je
+            roibi(j,np2) = r2i(j)
+            phi(iop1(j),j) = phi(iop1(j),j) + qm(np1)*u(j)*r2i(j)/xscale
+70        continue
+        endif
+      endif
+c
+c  Initial solution along inner j boundary
+c
+      if (igrijb .eq. 1) then
+        do 80 i=is,ie
+#ifdef RZ
+          r2 (i) = ((x1b(i)-x1a(izero))**2 + x2b(jim1(i))**2)/xscale**2
+          r2i(i) = 1.0/r2(i)
+          r1i(i) = sqrt(r2i(i))
+          u  (i) = ((x1b(i)-x1a(izero))/xscale)*r1i(i)
+#endif
+#ifdef RT
+          r1i(i) = x1bi(i)*xscale
+          r2i(i) = r1i(i)**2
+          u  (i) = cos(x2b(jim1(i)))
+#endif
+          pijb (i,n  ) = 1.0
+          pijb (i,np1) = u  (i)
+          rijbi(i,np1) = r1i(i)
+          phi  (i,jim1(i)) = qm(n)*r1i(i)/xscale
+80      continue
+c
+        if (isymm .eq. 1) then
+          do 90 i=is,ie
+            rijbi(i,np2) = r2i(i)
+            phi(i,jim1(i)) = phi(i,jim1(i)) + qm(np1)*u(i)*r2i(i)/xscale
+90        continue
+        endif
+      endif
+c
+c  Initial solution along outer j boundary
+c
+      if (igrojb .eq. 1) then
+        do 100 i=is,ie
+#ifdef RZ
+          r2 (i) = ((x1b(i)-x1a(izero))**2 + x2b(jop1(i))**2)/xscale**2
+          r2i(i) = 1.0/r2(i)
+          r1i(i) = sqrt(r2i(i))
+          u  (i) = ((x1b(i)-x1a(izero))/xscale)*r1i(i)
+#endif
+#ifdef RT
+          r1i(i) = x1bi(i)*xscale
+          r2i(i) = r1i(i)**2
+          u  (i) = cos(x2b(jop1(i)))
+#endif
+          pojb (i,n  ) = 1.0
+          pojb (i,np1) = u  (i)
+          rojbi(i,np1) = r1i(i)
+          phi(i,jop1(i)) = qm(n)*r1i(i)/xscale
+100     continue
+c
+        if (isymm .eq. 1) then
+          do 110 i=is,ie
+            rojbi(i,np2) = r2i(i)
+            phi(i,jop1(i)) = phi(i,jop1(i)) + qm(np1)*u(i)*r2i(i)/xscale
+110       continue
+        endif
+      endif
+c
+c  Begin iterations up to nmax terms.  Once the maximum error over all
+c  the boundary grid points (ephimx) drops below errphi, then we break.
+c  Start by calculating the multipole moment for this iteration.  A
+c  recursion relation is used to generate the succesive Legendre polys:
+c          Pn(u) = [(2n-1)*u*Pn-1(u) - (n-1)Pn-2(u)]/n
+c
+      if (nmax .le. 2) goto 2000
+      do 1000 iter=2,nmax
+        ephimx  = 0.0
+        qm(n  ) = 0.0
+        qm(np1) = 0.0
+        rn = rn + 2.0
+        do 140 j=js,je
+          do 120 i=ii(j),io(j)
+#ifdef RZ
+            r2(i) = ((x1b(i)-x1a(izero))**2 + x2b(j)**2)/xscale**2
+            u (i) = (x1b(i)-x1a(izero))/(xscale*sqrt(r2(i)))
+#endif
+#ifdef RT
+            r2(i) = x1b(i)*x1b(i)/xscale**2
+            u (i) = cos(x2b(j))
+#endif
+            q(i,j,n  ) = ((2.0*rn - 1.0)*q(i,j,nm1) *u(i) 
+     &                  - (    rn - 1.0)*q(i,j,nm2))/ rn 
+            q(i,j,np1) = ((2.0*rn + 1.0)*q(i,j,n  ) *u(i)
+     &                  -      rn       *q(i,j,nm1))/(rn + 1.0)
+            r(i,j,n  ) = r(i,j,nm2)*r2(i)
+            qm(n)      = qm(n) + dm(i,j)*r(i,j,n)*q(i,j,n)
+120       continue
+c
+          if (isymm .eq. 1) then
+            do 130 i=ii(j),io(j)
+              r(i,j,np1) = r(i,j,nm1)*r2(i)
+              qm(np1)    = qm(np1) + dm(i,j)*r(i,j,np1)*q(i,j,np1)
+130         continue
+          endif
+140     continue
+c
+        if (isymm .eq. 0) then
+          qm(n  ) = fpg*qm(n  )
+        endif
+        if (isymm .eq. 1) then
+          qm(n  ) = tpg*qm(n  )
+          qm(np1) = tpg*qm(np1)
+        endif
+c
+c  Calculate phi along the inner i boundary
+c
+        if (igriib .eq. 1) then
+          do 150 j=js,je
+#ifdef RZ
+            r2 (j) =((x1b(iim1(j))-x1a(izero))**2 + x2b(j)**2)/xscale**2
+            r2i(j) = 1.0/r2(j)
+            u  (j) = ((x1b(iim1(j))-x1a(izero))/xscale)*sqrt(r2i(j))
+#endif
+#ifdef RT
+            r2i(j) = x1bi(iim1(j))*x1bi(iim1(j))*xscale**2
+            u  (j) = cos(x2b(j))
+#endif
+            piib (j,n  ) = ((2.0*rn - 1.0)*piib(j,nm1) *u(j)
+     &                    - (    rn - 1.0)*piib(j,nm2))/ rn
+            piib (j,np1) = ((2.0*rn + 1.0)*piib(j,n  ) *u(j)
+     &                    -      rn       *piib(j,nm1))/(rn + 1.0) 
+            riibi(j,np1) = riibi(j,nm1)*r2i(j)
+            deltphi = qm(n)*piib(j,n)*riibi(j,np1)/xscale
+            errphi  = abs(deltphi/phi(iim1(j),j))
+            if (errphi .gt. ephimx) ephimx = errphi
+            phi(iim1(j),j) = phi(iim1(j),j) + deltphi
+150       continue
+c
+          if (isymm .eq. 1) then
+            do 160 j=js,je
+              riibi(j,np2) = riibi(j,n)*r2i(j)
+              deltphi = qm(np1)*piib(j,np1)*riibi(j,np2)/xscale
+              errphi  = abs(deltphi/phi(iim1(j),j))
+              if (errphi .gt. ephimx) ephimx = errphi
+              phi(iim1(j),j) = phi(iim1(j),j) + deltphi
+160         continue
+          endif
+        endif
+c
+c  Calculate phi along the outer i boundary
+c
+        if (igroib .eq. 1) then
+          do 170 j=js,je
+#ifdef RZ
+            r2 (j) =((x1b(iop1(j))-x1a(izero))**2 + x2b(j)**2)/xscale**2
+            r2i(j) = 1.0/r2(j)
+            u  (j) = ((x1b(iop1(j))-x1a(izero))/xscale)*sqrt(r2i(j))
+#endif
+#ifdef RT
+            r2i(j) = x1bi(iop1(j))*x1bi(iop1(j))*xscale**2
+            u  (j) = cos(x2b(j))
+#endif
+            poib (j,n  ) = ((2.0*rn - 1.0)*poib(j,nm1) *u(j)
+     &                    - (    rn - 1.0)*poib(j,nm2))/ rn
+            poib (j,np1) = ((2.0*rn + 1.0)*poib(j,n  ) *u(j)
+     &                    -      rn       *poib(j,nm1))/(rn + 1.0) 
+            roibi(j,np1) = roibi(j,nm1)*r2i(j)
+            deltphi = qm(n)*poib(j,n)*roibi(j,np1)/xscale
+            errphi  = abs(deltphi/phi(iop1(j),j))
+            if (errphi .gt. ephimx) ephimx = errphi
+            phi(iop1(j),j) = phi(iop1(j),j) + deltphi
+170       continue
+c
+          if (isymm .eq. 1) then
+            do 180 j=js,je
+              roibi(j,np2) = roibi(j,n)*r2i(j)
+              deltphi = qm(np1)*poib(j,np1)*roibi(j,np2)/xscale
+              errphi  = abs(deltphi/phi(iop1(j),j))
+              if (errphi .gt. ephimx) ephimx = errphi
+              phi(iop1(j),j) = phi(iop1(j),j) + deltphi
+180         continue
+          endif
+        endif
+c
+c  Calculate phi along the inner j boundary
+c
+        if (igrijb .eq. 1) then
+          do 190 i=is,ie
+#ifdef RZ
+            r2 (i) =((x1b(i)-x1a(izero))**2 + x2b(jim1(i))**2)/xscale**2
+            r2i(i) = 1.0/r2(i)
+            u  (i) = ((x1b(i)-x1a(izero))/xscale)*sqrt(r2i(i))
+#endif
+#ifdef RT
+            r2i(i) = x1bi(i)*x1bi(i)*xscale**2
+            u  (i) = cos(x2b(jim1(i)))
+#endif
+            pijb (i,n  ) = ((2.0*rn - 1.0)*pijb(i,nm1) *u(i)
+     &                    - (    rn - 1.0)*pijb(i,nm2))/ rn
+            pijb (i,np1) = ((2.0*rn + 1.0)*pijb(i,n  ) *u(i)
+     &                    - (    rn      )*pijb(i,nm1))/(rn + 1.0)
+            rijbi(i,np1) = rijbi(i,nm1)*r2i(i)
+            deltphi = qm(n)*pijb(i,n)*rijbi(i,np1)/xscale
+            errphi  = abs(deltphi/phi(i,jim1(i)))
+            if (errphi .gt. ephimx) ephimx = errphi
+            phi(i,jim1(i)) = phi(i,jim1(i)) + deltphi
+190       continue
+c
+          if (isymm .eq. 1) then
+            do 200 i=is,ie
+              rijbi(i,np2) = rijbi(i,n)*r2i(i)
+              deltphi = qm(np1)*pijb(i,np1)*rijbi(i,np2)/xscale
+              errphi  = abs(deltphi/phi(i,jim1(i)))
+              if (errphi .gt. ephimx) ephimx = errphi
+              phi(i,jim1(i)) = phi(i,jim1(i)) + deltphi
+200         continue
+          endif
+        endif
+c
+c  Calculate phi along the outer j boundary
+c
+        if (igrojb .eq. 1) then
+          do 210 i=is,ie
+#ifdef RZ
+            r2 (i) =((x1b(i)-x1a(izero))**2 + x2b(jop1(i))**2)/xscale**2
+            r2i(i) = 1.0/r2(i)
+            u  (i) = ((x1b(i)-x1a(izero))/xscale)*sqrt(r2i(i))
+#endif
+#ifdef RT
+            r2i(i) = x1bi(i)*x1bi(i)*xscale**2
+            u  (i) = cos(x2b(jop1(i)))
+#endif
+            pojb (i,n  ) = ((2.0*rn - 1.0)*pojb(i,nm1)*u(i)
+     &                    - (    rn - 1.0)*pojb(i,nm2))/ rn
+            pojb (i,np1) = ((2.0*rn + 1.0)*pojb(i,n  )*u(i)
+     &                    -      rn       *pojb(i,nm1))/(rn + 1.0)
+            rojbi(i,np1) = rojbi(i,nm1)*r2i(i)
+            deltphi = qm(n)*pojb(i,n)*rojbi(i,np1)/xscale
+            errphi  = abs(deltphi/phi(i,jop1(i)))
+            if (errphi .gt. ephimx) ephimx = errphi
+            phi(i,jop1(i)) = phi(i,jop1(i)) + deltphi
+210       continue
+c
+          if (isymm .eq. 1) then
+            do 220 i=is,ie
+              rojbi(i,np2) = rojbi(i,n)*r2i(i)
+              deltphi = qm(np1)*pojb(i,np1)*rojbi(i,np2)/xscale
+              errphi  = abs(deltphi/phi(i,jop1(i)))
+              if (errphi .gt. ephimx) ephimx = errphi
+              phi(i,jop1(i)) = phi(i,jop1(i)) + deltphi
+220         continue
+          endif
+        endif
+c
+c  Break if error criterion satisfied
+        if (ephimx .le. errmax) goto 2000
+1000  continue
+c
+c  If this point is reached, then boundary values did not drop below
+c  errphi within nmax iterations; issue warning and continue.
+c
+      write(2,"(/1x,'WARNING from PHIBV: error in gravitational ',
+     &'potential boundary value',/1x,'exceeds limit; max err = ',
+     &1pe12.5)") ephimx
+      nwarn = nwarn + 1 
+      return
+c
+2000  continue
+      write(2,"(1x,'nhy=',i5,' PHIBV: boundary pots converged in ',i3,
+     & ' iterations, eps=',1pe12.5)") nhy,iter,ephimx
+#endif
+      return
+      end

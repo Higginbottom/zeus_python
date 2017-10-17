@@ -1,0 +1,43 @@
+/*================= SAMPLE MACRO DEFINITION FILE =================== */
+/*  This file shows all valid ZEUS-2D macro definitions used to      */
+/*  control compilation.  Be sure the unused operating system        */
+/*  definitions are commented out in exactly the format as below.    */
+/*  Some definitions are mutually exclusive.  Use this file          */
+/*  as a template for new applications.                              */
+/*========================== physics ================================*/
+/* #define XY */
+/* #define RZ */
+#define RT 
+/* #define GRAV */
+#define ROTATE
+/* #define MHD  */
+/* #define RAD  */ 
+/* This is a new mode, defined by NSH 7/7/15 should permit connection to python */
+#define PYHYDRO
+/*========================  array dimensioning  ======================*/
+#define NUM_OF_I_ZONES    405
+#define NUM_OF_J_ZONES    405
+#define MAX_OF_IN_OR_JN   405
+#define A_SMALL_NUMBER    1.000e-30
+#define A_BIG_NUMBER      1.000e+30
+#define ABSORPTION        0.0
+#define D_ABSORPTION_DT   0.0
+#define SCATTERING        0.0
+#define REAL real*8
+#define NUM_OF_XI_LOOKUP  501
+#define NUM_OF_T_LOOKUP  501
+/*=========================  operating system  ======================*/
+/* #define SGI */
+/* #define SUN */
+#define DEC
+/* #define UNICOS */
+/* #define CONVEX */
+/* #define IBM */
+/* #define HP */
+/*=========================  optional modules  ======================*/
+#define VISCOSITY viscus
+#define PROBLEM diskw
+#define SPECIAL diskwbc
+#define RESTART restart
+#define USERDUMP movie
+

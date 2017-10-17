@@ -1,0 +1,113 @@
+#include "zeus2d.def"
+#include "options.h"
+#include "version.h"
+c=======================================================================
+c/////////////////////////  ZEUS2D MAIN PROGRAM  \\\\\\\\\\\\\\\\\\\\\\\
+c
+c  written by:   Jim Stone
+c  release date: January 1, 1993
+c
+c  PURPOSE:  New implementation of Mike Norman's "ZEUS" code for 2D
+c  Astrophysical Fluid Dynamics.  Major extensions developed by Jim
+c  Stone for this release of the ZEUS-2D code include:
+c    o UNIX and FORTRAN-77 compatibility 
+c    o Covariant finite differencing
+c    o Self-gravity using ICCG
+c    o MHD algorithm based on Constrained Transport (CT) formalism
+c    o Radiation Hydrodynamic algorithms based on flux limited diffusion
+c
+c  HISTORY: ZEUS-2D was developed from the ZEUS code release 0.4
+c  written by David Clarke and Mike Norman.
+c
+c  DOCUMENTATION:  See Ap. J. Supp., 80, 753 (Hydro)
+c                      Ap. J. Supp., 80, 791 (MHD)
+c                      Ap. J. Supp., 80, 819 (Radiation Hydro)
+c
+c-----------------------------------------------------------------------
+
+      implicit NONE
+#include "param.h"
+#include "grid.h"
+#include "root.h"
+      REAL     zcs
+      integer  iswres,iswhdf,iswhst,iswusr,icode
+      external mstart,dataio,srcstep,nudt,newgrid,intchk,SPECIAL
+c\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\///////////////////////////////////
+c=======================================================================
+c  Write greetings and problem definitions
+c
+      write(6,"(///10x,'ZZZZZ EEEEE U   U  SSSS     2222  DDDD ')")
+      write(6,   "(10x,'   Z  E     U   U S             2 D   D')")
+      write(6,   "(10x,'  Z   EEEE  U   U  SSS  ===  222  D   D')")
+      write(6,   "(10x,' Z    E     U   U     S     2     D   D')")
+      write(6,   "(10x,'ZZZZZ EEEEE  UUU  SSSS      22222 DDDD ')")
+      write(6,"()")
+      write(6,"()")
+      write(6,"(10x,' DEVELOPED BY J.M. STONE & M.L. NORMAN')")
+      write(6,"(10x,'  REVISED AND ENHANCED BY R.A. FIEDLER')")
+      write(6,"(10x,'     ZEUS-2D V2.0.3 - RELEASED 2/95')")
+      write(6,"()")
+	  write(6,*) GIT_BRANCH
+	  write(6,*) GIT_COMMIT_HASH 
+      write(6,"()")
+	  
+      write(6,"(1x,'The following problem is being initialized:')")
+c
+      write(6, GEOMETRY_OPTION  )
+      write(6, GRAVITY_OPTION   )
+      write(6, ROTATION_OPTION  )
+      write(6, MHD_OPTION       )
+      write(6, RADIATION_OPTION )
+      write(6, PYTHON_OPTION    )
+
+c
+c  Initialize problem and write first data dump
+c
+      zcs    = 0.0
+      iswres = 0
+      iswhdf = 1
+      iswhst = 1
+      iswusr = 1
+      call mstart
+      open (unit=3,file=hstfile,status='unknown')
+      call dataio(iswres,iswhdf,iswhst,iswusr)
+      write(6,"(/,'Setup complete with ',i2,' warning(s):',
+     &  ' entering main loop...')") nwarn
+c
+c--------------------------  start of main loop  -----------------------
+c  execution ends when INTCHK returns a value of 1 for ifsen
+c
+1000  continue
+#ifdef GRAV
+        call gravity
+#endif
+        call srcstep
+        call transprt
+        call SPECIAL
+        nhy   = nhy   + 1
+        time  = time  + dt
+        call intchk(iswres,iswhdf,iswhst,iswusr,icode)
+        call dataio(iswres,iswhdf,iswhst,iswusr)
+        if (ifsen .eq. 1) goto 2000
+        call nudt
+        call newgrid
+      goto 1000
+c
+c--------------------------  end of main loop  -------------------------
+c  terminate run by making final dumps, write goodbyes
+c
+2000  continue
+      iswres = 1
+      iswhdf = 1
+      iswhst = 1
+      iswusr = 1
+      call dataio(iswres,iswhdf,iswhst,iswusr)
+      zcs = float(nhy*nx1z*nx2z)/tused
+      write(6,"('Execution terminated with ',i4,' warning(s)')") nwarn
+      write(6,"('zone-cycles per cpu second =',1pe12.5)") zcs
+      close(unit=2)
+      close(unit=3)
+c NSH modificiation - terminate with an exit code to permit 
+c a python controlling script to understand whats going on
+      call exit(icode) 
+      end

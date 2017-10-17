@@ -1,0 +1,516 @@
+#include "zeus2d.def"
+c=======================================================================
+c/////////////////////////  SUBROUTINE HDFALL  \\\\\\\\\\\\\\\\\\\\\\\\\
+c
+      subroutine hdfall(filename)
+c
+c  PURPOSE: Makes an hdf dump of all the active field variables.  The
+c  set of field variables dumped is problem specific (depends on what
+c  physics is defined).  Data is written in the Scientific Data Set
+c  format to the file zhzNNXX.
+c  Note that data must be stored column major and contiguously in order
+c  to interface correctly to the C hdf routines.  All variables are
+c  dumped as zone centered quantities.
+c
+c  EXTERNALS: HDF library routines
+c
+c  LOCALS:
+c-----------------------------------------------------------------------
+      implicit NONE
+#include "param.h"
+#include "grid.h"
+#include "field.h"
+#include "root.h"
+#include "scratch.h"
+      integer  i,j
+	  real old_time
+#ifdef UNICOS
+      integer rank,shape(2),ret
+      real data(in*jn),xscale(in),yscale(jn)
+      integer  dssdims,dssdast,dssdisc,dsadata,dspdata
+#else
+      integer*4 rank,shape(2),ret
+      real*4 data(in*jn),xscale(in),yscale(jn)
+      integer*4 dssdims,dssdast,dssdisc,dsadata,dspdata
+#endif
+c
+      character*17  filename
+      character*16 coordsys
+      character*40 string
+c
+      equivalence (data,wb),(xscale,wi0),(yscale,wj0)
+c
+      external dssdims,dssdast,dssdisc,dsadata,dspdata
+c\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\///////////////////////////////
+c=======================================================================
+c
+#ifdef RT
+      coordsys = 'spherical polar' // char(0)
+#endif
+#ifdef RZ
+      coordsys = 'cylindrical' // char(0)
+#endif
+#ifdef XY
+      coordsys = 'cartesian' // char(0)
+#endif
+      do 10 i=is,ie
+        xscale(i-is+1) = real(x1b(i))
+10    continue
+      do 20 j=js,je
+        yscale(j-js+1) = real(x2b(j))
+20    continue
+c
+      print *,"Outputting hdf file for time=",time,100*time/tlim
+     &," % done"," dt currently ",dt
+      rank     = 2
+      shape(1) = nx1z
+      shape(2) = nx2z
+      ret = dssdims(rank,shape)
+      ret = dssdisc(1,shape(1),xscale)
+      ret = dssdisc(2,shape(2),yscale)
+c
+c  density
+c
+      do 110 j=js,je
+        do 100 i=is,ie
+          data((j-js)*nx1z + i -is+1) = real(d(i,j))
+100     continue
+110   continue
+      write(string,"('DENSITY AT TIME=',1pe14.6,'        ')") time
+      ret = dssdast(string,' ',' ',coordsys)
+      ret = dspdata(filename,rank,shape,data)
+c
+c  ionization parameter
+c
+      do 111 j=js,je
+        do 101 i=is,ie
+          data((j-js)*nx1z + i -is+1) = real(xi(i,j))
+101     continue
+111   continue
+      write(string,"('XI AT TIME=',1pe14.6,'        ')") time
+      ret = dssdast(string,' ',' ',coordsys)
+      ret = dsadata(filename,rank,shape,data)
+c
+c  compton cooling
+c
+      do 113 j=js,je
+        do 103 i=is,ie
+c			if (i.eq.3 .and. j.eq.90) thenc
+c				print *,xi(i,j),comp_c_pre(i,j),c_comp(i,j),real(c_comp(i,j))
+c			endif 
+			
+			
+          data((j-js)*nx1z + i -is+1) = real(c_comp(i,j))
+103     continue
+113   continue
+      write(string,"('COMP_C AT TIME=',1pe14.6,'        ')") time
+      ret = dssdast(string,' ',' ',coordsys)
+      ret = dsadata(filename,rank,shape,data)
+c
+c  compton heating
+c
+      do 163 j=js,je
+        do 173 i=is,ie
+          data((j-js)*nx1z + i -is+1) = real(h_comp(i,j))
+173     continue
+163   continue
+      write(string,"('COMP_H AT TIME=',1pe14.6,'        ')") time
+      ret = dssdast(string,' ',' ',coordsys)
+      ret = dsadata(filename,rank,shape,data)
+c
+c  xray cooling
+c
+      do 164 j=js,je
+        do 174 i=is,ie
+          data((j-js)*nx1z + i -is+1) = real(h_xray(i,j))
+174     continue
+164   continue
+      write(string,"('XRAY_H AT TIME=',1pe14.6,'        ')") time
+      ret = dssdast(string,' ',' ',coordsys)
+      ret = dsadata(filename,rank,shape,data)
+c
+c  line cooling
+c
+      do 115 j=js,je
+        do 105 i=is,ie
+          data((j-js)*nx1z + i -is+1) = real(c_line(i,j))
+105     continue
+115   continue
+      write(string,"('LINE_C AT TIME=',1pe14.6,'        ')") time
+      ret = dssdast(string,' ',' ',coordsys)
+      ret = dsadata(filename,rank,shape,data)
+c
+c  brem cooling
+c
+      do 116 j=js,je
+        do 106 i=is,ie
+          data((j-js)*nx1z + i -is+1) = real(c_brem(i,j))
+106     continue
+116   continue
+      write(string,"('BREM_C AT TIME=',1pe14.6,'        ')") time
+      ret = dssdast(string,' ',' ',coordsys)
+      ret = dsadata(filename,rank,shape,data)
+c
+c  old internal energy
+c
+      old_time=time-dt
+      do 112 j=js,je
+        do 102 i=is,ie
+          data((j-js)*nx1z + i -is+1) = real(e_old(i,j))
+102     continue
+112   continue
+      write(string,"('OLD ENERGY AT TIME=',1pe14.6,'   ')") old_time
+      ret = dssdast(string,' ',' ',coordsys)
+      ret = dsadata(filename,rank,shape,data)
+c
+c  old temp
+c
+      old_time=time-dt
+      do 117 j=js,je
+        do 107 i=is,ie
+          data((j-js)*nx1z + i -is+1) = real(t_old(i,j))
+107     continue
+117   continue
+      write(string,"('OLD TEMP AT TIME=',1pe14.6,'   ')") old_time
+      ret = dssdast(string,' ',' ',coordsys)
+      ret = dsadata(filename,rank,shape,data)
+c
+c  adiabatic heating
+c
+      do 118 j=js,je
+        do 108 i=is,ie
+          data((j-js)*nx1z + i -is+1) = real(adiab(i,j))
+108     continue
+118   continue
+      write(string,"('ADIABATIC AT TIME=',1pe14.6,'   ')") time
+      ret = dssdast(string,' ',' ',coordsys)
+      ret = dsadata(filename,rank,shape,data)
+c
+c  pdv
+c
+      do 119 j=js,je
+        do 109 i=is,ie
+          data((j-js)*nx1z + i -is+1) = real(divv1(i,j))
+109     continue
+119   continue
+      write(string,"('DIVV AT TIME=',1pe14.6,'   ')") time
+      ret = dssdast(string,' ',' ',coordsys)
+      ret = dsadata(filename,rank,shape,data)
+c
+c  v1 at time of pdv calc
+c
+      do 120 j=js,je
+        do 130 i=is,ie
+          data((j-js)*nx1z + i -is+1) = real(v1_pdv(i,j))
+130     continue
+120   continue
+      write(string,"('V1_PDV AT TIME=',1pe14.6,'   ')") time
+      ret = dssdast(string,' ',' ',coordsys)
+      ret = dsadata(filename,rank,shape,data)
+c
+c  v2 at time of pdv calc
+c
+      do 121 j=js,je
+        do 131 i=is,ie
+          data((j-js)*nx1z + i -is+1) = real(v2_pdv(i,j))
+131     continue
+121   continue
+      write(string,"('V2_PDV AT TIME=',1pe14.6,'   ')") time
+      ret = dssdast(string,' ',' ',coordsys)
+      ret = dsadata(filename,rank,shape,data)
+	  
+
+	  
+	  
+c
+c  soundspeed timescale
+c
+      do 122 j=js,je
+        do 132 i=is,ie
+          data((j-js)*nx1z + i -is+1) = real(dt_csound(i,j))
+132     continue
+122   continue
+      write(string,"('CS_TS AT TIME=',1pe14.6,'   ')") time
+      ret = dssdast(string,' ',' ',coordsys)
+      ret = dsadata(filename,rank,shape,data)	  
+  
+  
+c
+c  v1 timescale
+c
+      do 123 j=js,je
+        do 133 i=is,ie
+          data((j-js)*nx1z + i -is+1) = real(dt_v1(i,j))
+133     continue
+123   continue
+      write(string,"('V1_TS AT TIME=',1pe14.6,'   ')") time
+      ret = dssdast(string,' ',' ',coordsys)
+      ret = dsadata(filename,rank,shape,data)
+  
+c
+c  v2 timescale
+c
+      do 124 j=js,je
+        do 134 i=is,ie
+          data((j-js)*nx1z + i -is+1) = real(dt_v2(i,j))
+134     continue
+124   continue
+      write(string,"('V2_TS AT TIME=',1pe14.6,'   ')") time
+      ret = dssdast(string,' ',' ',coordsys)
+      ret = dsadata(filename,rank,shape,data)
+  
+  
+c
+c  alfen timescale
+c
+      do 125 j=js,je
+        do 135 i=is,ie
+          data((j-js)*nx1z + i -is+1) = real(dt_alfen(i,j))
+135     continue
+125   continue
+      write(string,"('ALFEN_TS AT TIME=',1pe14.6,'   ')") time
+      ret = dssdast(string,' ',' ',coordsys)
+      ret = dsadata(filename,rank,shape,data)
+  
+c
+c  viscosity timescale
+c
+      do 126 j=js,je
+        do 136 i=is,ie
+          data((j-js)*nx1z + i -is+1) = real(dt_viscosity(i,j))
+136     continue
+126   continue
+      write(string,"('VISCOUS__TS AT TIME=',1pe14.6,'   ')") time
+      ret = dssdast(string,' ',' ',coordsys)
+      ret = dsadata(filename,rank,shape,data)
+  
+  
+c
+c  compton cooling prefactor
+c
+      do 127 j=js,je
+        do 137 i=is,ie
+          data((j-js)*nx1z + i -is+1) = real(comp_c_pre(i,j))
+137     continue
+127   continue
+      write(string,"('COMP_C_PRE AT TIME=',1pe14.6,'   ')") time
+      ret = dssdast(string,' ',' ',coordsys)
+      ret = dsadata(filename,rank,shape,data)
+	  
+c
+c  compton heating prefactor
+c
+      do 152 j=js,je
+        do 142 i=is,ie
+          data((j-js)*nx1z + i -is+1) = real(comp_h_pre(i,j))
+142     continue
+152   continue
+      write(string,"('COMP_H_PRE AT TIME=',1pe14.6,'   ')") time
+      ret = dssdast(string,' ',' ',coordsys)
+      ret = dsadata(filename,rank,shape,data)	  
+	  
+	  
+c
+c  line prefactor
+c
+      do 128 j=js,je
+        do 138 i=is,ie
+          data((j-js)*nx1z + i -is+1) = real(line_pre(i,j))
+138     continue
+128   continue
+      write(string,"('LINE_PRE AT TIME=',1pe14.6,'   ')") time
+      ret = dssdast(string,' ',' ',coordsys)
+      ret = dsadata(filename,rank,shape,data)
+	  
+  
+c
+c  xray prefactor
+c
+      do 143 j=js,je
+        do 153 i=is,ie
+          data((j-js)*nx1z + i -is+1) = real(xray_pre(i,j))
+153     continue
+143   continue
+      write(string,"('XRAY_PRE AT TIME=',1pe14.6,'   ')") time
+      ret = dssdast(string,' ',' ',coordsys)
+      ret = dsadata(filename,rank,shape,data)	  
+	  
+	  
+c
+c  brem prefactor
+c
+      do 141 j=js,je
+        do 151 i=is,ie
+          data((j-js)*nx1z + i -is+1) = real(brem_pre(i,j))
+151     continue
+141   continue
+      write(string,"('BREM_PRE AT TIME=',1pe14.6,'   ')") time
+      ret = dssdast(string,' ',' ',coordsys)
+      ret = dsadata(filename,rank,shape,data)
+	  
+	  
+	  
+c
+c  net heating/cooling
+c
+      do 144 j=js,je
+        do 154 i=is,ie
+          data((j-js)*nx1z + i -is+1) = real(net_hc(i,j))
+154     continue
+144   continue
+      write(string,"('NET_HC AT TIME=',1pe14.6,'   ')") time
+      ret = dssdast(string,' ',' ',coordsys)
+      ret = dsadata(filename,rank,shape,data)	  
+	  
+	  
+c
+c  net heating/cooling
+c
+      do 145 j=js,je
+        do 155 i=is,ie
+          data((j-js)*nx1z + i -is+1) = real(heat_tot(i,j))
+155     continue
+145   continue
+      write(string,"('TOT_HEAT AT TIME=',1pe14.6,'   ')") time
+      ret = dssdast(string,' ',' ',coordsys)
+      ret = dsadata(filename,rank,shape,data)	
+	  
+c
+c  net heating/cooling
+c
+      do 146 j=js,je
+        do 156 i=is,ie
+          data((j-js)*nx1z + i -is+1) = real(cool_tot(i,j))
+156     continue
+146   continue
+      write(string,"('TOT_COOL AT TIME=',1pe14.6,'   ')") time
+      ret = dssdast(string,' ',' ',coordsys)
+      ret = dsadata(filename,rank,shape,data)		  
+	  
+c
+c  optical depths
+c
+c      do 147 j=js,je
+c        do 157 i=is,ie
+c          data((j-js)*nx1z + i -is+1) = real(tau_x(i,j))
+c 157     continue
+c 147   continue
+c      write(string,"('TAU_X AT TIME=',1pe14.6,'   ')") time
+c      ret = dssdast(string,' ',' ',coordsys)
+c      ret = dsadata(filename,rank,shape,data)		  	  
+	  
+	  
+	  
+c
+c  internal energy
+c
+      do 210 j=js,je
+        do 200 i=is,ie
+          data((j-js)*nx1z + i -is+1) = real(e(i,j))
+200     continue
+210   continue
+      write(string,"('TOTAL ENERGY AT TIME=',1pe14.6,'   ')") time
+      ret = dssdast(string,' ',' ',coordsys)
+      ret = dsadata(filename,rank,shape,data)
+c
+c  1-velocity
+c
+      do 310 j=js,je
+        do 300 i=is,ie
+	  wa(i,j) = 0.5*(v1(i,j) + v1(i+1,j))
+          data((j-js)*nx1z + i -is+1) = real(wa(i,j))
+300     continue
+310   continue
+      write(string,"('1-VELOCITY AT TIME=',1pe14.6,'     ')") time
+      ret = dssdast(string,' ',' ',coordsys)
+      ret = dsadata(filename,rank,shape,data)
+c
+c  2-velocity
+c
+      do 410 j=js,je
+        do 400 i=is,ie
+	  wa(i,j) = 0.5*(v2(i,j) + v2(i,j+1))
+          data((j-js)*nx1z + i -is+1) = real(wa(i,j))
+400     continue
+410   continue
+      write(string,"('2-VELOCITY AT TIME=',1pe14.6,'     ')") time
+      ret = dssdast(string,' ',' ',coordsys)
+      ret = dsadata(filename,rank,shape,data)
+c
+c  3-velocity
+c
+#ifdef ROTATE
+      do 510 j=js,je
+        do 500 i=is,ie
+          data((j-js)*nx1z + i -is+1) = real(v3(i,j))
+500     continue
+510   continue
+      write(string,"('3-VELOCITY AT TIME=',1pe14.6,'     ')") time
+      ret = dssdast(string,' ',' ',coordsys)
+      ret = dsadata(filename,rank,shape,data)
+#endif
+c
+c  gravitational potential
+c
+#ifdef GRAV
+      do 610 j=js,je
+        do 600 i=is,ie
+          data((j-js)*nx1z + i -is+1) = real(phi(i,j))
+600     continue
+610   continue
+      write(string,"('GRAV POT AT TIME=',1pe14.6,'       ')") time
+      ret = dssdast(string,' ',' ',coordsys)
+      ret = dsadata(filename,rank,shape,data)
+#endif
+c
+c  1-magnetic field
+c
+#ifdef MHD
+      do 710 j=js,je
+        do 700 i=is,ie
+	  wa(i,j) = 0.5*(b1(i,j) + b1(i+1,j))
+          data((j-js)*nx1z + i -is+1) = real(wa(i,j))
+700     continue
+710   continue
+      write(string,"('1-MAG FIELD AT TIME=',1pe14.6,'    ')") time
+      ret = dssdast(string,' ',' ',coordsys)
+      ret = dsadata(filename,rank,shape,data)
+c
+c  2-magnetic field
+c
+      do 810 j=js,je
+        do 800 i=is,ie
+	  wa(i,j) = 0.5*(b2(i,j) + b2(i,j+1))
+          data((j-js)*nx1z + i -is+1) = real(wa(i,j))
+800     continue
+810   continue
+      write(string,"('2-MAG FIELD AT TIME=',1pe14.6,'    ')") time
+      ret = dssdast(string,' ',' ',coordsys)
+      ret = dsadata(filename,rank,shape,data)
+c
+c  3-magnetic field
+c
+      do 910 j=js,je
+        do 900 i=is,ie
+          data((j-js)*nx1z + i -is+1) = real(b3(i,j))
+900     continue
+910   continue
+      write(string,"('3-MAG FIELD AT TIME=',1pe14.6,'    ')") time
+      ret = dssdast(string,' ',' ',coordsys)
+      ret = dsadata(filename,rank,shape,data)
+#endif
+c
+c  radiation internal energy
+c
+#ifdef RAD
+      do 1010 j=js,je
+        do 1000 i=is,ie
+          data((j-js)*nx1z + i -is+1) = real(er(i,j))
+1000    continue
+1010  continue
+      write(string,"('RADIATION E AT TIME=',1pe14.6,'    ')") time
+      ret = dssdast(string,' ',' ',coordsys)
+      ret = dsadata(filename,rank,shape,data)
+#endif
+      return
+      end

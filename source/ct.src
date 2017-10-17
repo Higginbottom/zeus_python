@@ -1,0 +1,215 @@
+#include "zeus2d.def"
+c=======================================================================
+c//////////////////////////  SUBROUTINE CT  \\\\\\\\\\\\\\\\\\\\\\\\\\\\
+c
+      subroutine ct
+#ifdef MHD
+c
+c  PURPOSE:  Using the constrained transport scheme of C. Evans and J. 
+c  Hawley, this routine transports the 1- and 2- components of the
+c  magnetic field.  Consistent transport (interpolating on B/d) is NOT
+c  used in this routine.  In 2-D, the b3 is unconstrained (ie DIV(b3) is
+c  always zero by symmetry), so that the CT scheme is not used for the
+c  3-component, but simply a transport algorithm combined with the field
+c  bending "source" term.  This work is performed in TRANX1 and TRANX2.
+c
+c  EXTERNALS: EMFS
+c             BVALEMF
+c
+c  LOCALS:
+c-----------------------------------------------------------------------
+      implicit NONE
+#include "param.h"
+#include "grid.h"
+#include "field.h"
+#include "root.h"
+#include "scratch.h"
+c
+      integer i,j,jlower,jupper,ilower,iupper
+      REAL    vel2(jn),tb1(jn),b1twid2(jn)
+     &       ,vel1(in),tb2(in),b2twid1(in)
+     &       ,term1(in,jn),term2(in,jn),emf(in,jn)
+      REAL qa,qb
+      logical trap
+      equivalence (vel2,wj0),(tb1,wj1),(b1twid2,wj2)
+     &           ,(vel1,wi0),(tb2,wi1),(b2twid1,wi2)
+     &           ,(term1,wa),(term2,wb),(emf,wd)
+c
+      external emfs,bvalemf,lorentz
+c\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\//////////////////////////////
+c=======================================================================
+c
+      call emfs(term1,term2)
+      do 20 j=js,je+1
+        do 10 i=ii(j),iop1(j)
+          term1(i,j) = g31ah(i)*g32ah(j)*term1(i,j)
+          term2(i,j) = g31ah(i)*g32ah(j)*term2(i,j)
+          emf  (i,j) = term1(i,j) - term2(i,j)
+10      continue
+20    continue
+      call bvalemf(emf,term1,term2)
+      call lorentz
+c
+c  emf's are finished, so now update the b1 and b2 using the emf array
+c  and the right-handed rule.  Since the same emf array (which has been
+c  computed for once and all above) is used throughout the grid, we
+c  gaurantee div(b) is conserved.
+c
+c  We must also update the boundary values of b1 and b2 using boundary
+c  emf values.  But note in RZ and RT coordinates, we must stay away
+c  from coordinate origins where the finite differnce eqns blow up.
+c  Thus we loop from i[j]lower to i[j]upper for b1[b2], and use
+c  special formulae if a singularity is detected.  Singularities can
+c  only occur along the axis of symmetry, so we have explicetly
+c  implemeted the BC in the finite difference eqns for symmetry axes.
+c
+c  Note the use of old and new areas of zone faces to account for grid
+c  compression.
+c
+c  Update b1
+c  Trap needed in RT at r=0
+c
+      do 100 j=js,je
+        ilower = iim1(j)
+        iupper = iop2(j)
+#ifdef RT
+        if (g2a(ii  (j)) .eq. 0.0) ilower = iip1(j)
+#endif
+        do 30 i=ilower,iupper
+          qa = g2a (i)*g31a (i)*dvl2a (j)
+          qb = g2an(i)*g31an(i)*dvl2an(j)
+          b1(i,j) = (b1(i,j)*qa + dt*(emf(i,j+1) - emf(i,j)))/qb
+30      continue
+#ifdef RT
+        if (ilower .ne. iim1(j)) then
+          b1(ii  (j),j) = 0.0
+          b1(iim1(j),j) = -b1(iip1(j),j)
+        endif
+#endif
+100   continue
+c
+c  update b1 along ijb and ojb
+c  Trap needed in RZ at r=0
+c  Trap needed in RT at theta=0 or pi
+c
+      trap = .false.
+#ifdef RZ
+      if (g32a(js) .eq. 0.0   ) trap = .true.
+#endif
+#ifdef RT
+      if (g32a(js) .lt. 1.0e-5) trap = .true.
+#endif
+      if (trap .eqv. .true.) then
+        do 110 i=is,ie+1
+          b1(i,jim1(i)) = b1(i,ji  (i))
+          b1(i,jim2(i)) = b1(i,jip1(i))
+110     continue
+      else
+        do 120 i=is,ie+1
+          qa = g2a (i)*g31a (i)*g32b (jim1(i))*dx2a (jim1(i))
+          qb = g2an(i)*g31an(i)*g32bn(jim1(i))*dx2an(jim1(i))
+          b1(i,jim1(i)) =
+     &      (b1(i,jim1(i))*qa + dt*(emf(i,ji  (i)) - emf(i,jim1(i))))/qb
+          qa = g2a (i)*g31a (i)*g32b (jim2(i))*dx2a (jim2(i))
+          qb = g2an(i)*g31an(i)*g32bn(jim2(i))*dx2an(jim2(i))
+          b1(i,jim2(i)) =
+     &      (b1(i,jim2(i))*qa + dt*(emf(i,jim1(i)) - emf(i,jim2(i))))/qb
+120     continue
+      endif
+      trap = .false.
+#ifdef RT
+      if (g32a(je+1) .lt. 1.0e-5) trap = .true.
+#endif
+      if (trap .eqv. .true.) then
+        do 130 i=is,ie+1
+          b1(i,jop1(i)) = b1(i,jo  (i))
+          b1(i,jop2(i)) = b1(i,jom1(i))
+130     continue
+      else
+        do 140 i=is,ie+1
+          qa = g2a (i)*g31a (i)*g32b (jop1(i))*dx2a (jop1(i))
+          qb = g2an(i)*g31an(i)*g32bn(jop1(i))*dx2an(jop1(i))
+          b1(i,jop1(i)) =
+     &      (b1(i,jop1(i))*qa + dt*(emf(i,jop2(i)) - emf(i,jop1(i))))/qb
+          qa = g2a (i)*g31a (i)*g32b (jop2(i))*dx2a (jop2(i))
+          qb = g2an(i)*g31an(i)*g32bn(jop2(i))*dx2an(jop2(i))
+          b1(i,jop2(i)) =
+     &      (b1(i,jop2(i))*qa + dt*(emf(i,jop3(i)) - emf(i,jop2(i))))/qb
+140     continue
+      endif
+c
+c  Now update b2.
+c  Trap needed in RZ at r=0
+c  Trap needed in RT at theta=0 or pi
+c 
+      do 200 i=is,ie
+        jlower = jim1(i)
+        jupper = jop2(i)
+#ifdef RZ
+        if (g32a(ji(i)) .eq. 0.0) jlower = jip1(i)
+#endif
+#ifdef RT
+        if (g32a(ji  (i)) .lt. 1.0e-5) jlower = jip1(i)
+        if (g32a(jop1(i)) .lt. 1.0e-5) jupper = jo  (i)
+#endif
+        do 150 j=jlower,jupper
+          qa = g31b (i)*g32a (j)*dx1a (i)
+          qb = g31bn(i)*g32an(j)*dx1an(i)
+          b2(i,j) = (b2(i,j)*qa - dt*(emf(i+1,j) - emf(i,j)))/qb
+150     continue
+#ifdef RZ
+        if (jlower .ne. jim1(i)) then
+          b2(i,ji  (i)) = 0.0
+          b2(i,jim1(i)) = -b2(i,jip1(i))
+        endif
+#endif
+#ifdef RT
+        if (jlower .ne. jim1(i)) then
+          b2(i,ji  (i)) = 0.0
+          b2(i,jim1(i)) = -b2(i,jip1(i))
+        endif
+        if (jupper .ne. jop2(i)) then
+          b2(i,jop1(i)) = 0.0
+          b2(i,jop2(i)) = -b2(i,jo(i))
+        endif
+#endif
+200   continue
+c
+c  update b2 along iib and oib
+c  Trap needed in RT at r=0
+c
+      trap = .false.
+#ifdef RT
+      if (g31a(is) .eq. 0.0) trap = .true.
+#endif
+      if (trap .eqv. .true.) then
+        do 210 j=js+1,je
+          b2(iim1(j),j) = 0.0
+          b2(iim2(j),j) = 0.0
+210     continue
+      else
+        do 220 j=js+1,je
+          qa = g31b (iim1(j))*g32a (j)*dx1a (iim1(j))
+          qb = g31bn(iim1(j))*g32an(j)*dx1an(iim1(j))
+          b2(iim1(j),j) =
+     &      (b2(iim1(j),j)*qa - dt*(emf(ii  (j),j) - emf(iim1(j),j)))/qb
+          qa = g31b (iim2(j))*g32a (j)*dx1a (iim2(j))
+          qb = g31bn(iim2(j))*g32an(j)*dx1an(iim2(j))
+          b2(iim2(j),j) =
+     &      (b2(iim2(j),j)*qa - dt*(emf(iim1(j),j) - emf(iim2(j),j)))/qb
+220     continue
+      endif
+c
+      do 230 j=js+1,je
+        qa = g31b (iop1(j))*g32a (j)*dx1a (iop1(j))
+        qb = g31bn(iop1(j))*g32an(j)*dx1an(iop1(j))
+        b2(iop1(j),j) =
+     &    (b2(iop1(j),j)*qa - dt*(emf(iop2(j),j) - emf(iop1(j),j)))/qb
+        qa = g31b (iop2(j))*g32a (j)*dx1a (iop2(j))
+        qb = g31bn(iop2(j))*g32an(j)*dx1an(iop2(j))
+        b2(iop2(j),j) =
+     &    (b2(iop2(j),j)*qa - dt*(emf(iop3(j),j) - emf(iop2(j),j)))/qb
+230   continue
+#endif
+      return
+      end

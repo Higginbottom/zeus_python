@@ -1,0 +1,115 @@
+#include "zeus2d.def"
+c=======================================================================
+c/////////////////////////  SUBROUTINE MOMX1  \\\\\\\\\\\\\\\\\\\\\\\\\\
+c
+      subroutine momx1(mflx1,s1,s2)
+c
+c  PURPOSE:  Transports the 1- and 2-components of vector variables
+c  in the 1-direction.  Currently transported are:
+c       1- and 2-components of momentum
+c  The consistent transport algorithm is used, including the effects of
+c  grid compression.  The transported fluxes are thus given by the mass
+c  fluxes times the time centered area of the control volume faces times
+c  the interpolated velocities.
+c  Interpolations are performed in X1INTFC and X1INTZC.
+c
+c  INPUT ARGUMENTS:
+c   mflx1 = mass flux in 1-direction 
+c   s1    = momentum density in 1-direction
+c   s2    = momentum density in 2-direction
+c
+c  OUTPUT ARGUMENTS:
+c   s1    = "half"-updated momentum density in 1-direction
+c   s2    = "half"-updated momentum density in 2-direction
+c
+c  EXTERNALS: X1INTFC
+c             X1INTZC
+c
+c  LOCALS:
+c-----------------------------------------------------------------------
+      implicit NONE
+#include "param.h"
+#include "root.h"
+#include "grid.h"
+#include "field.h"
+#include "scratch.h"
+      REAL    mflx1(in,jn),s1(in,jn),s2(in,jn)
+c
+      integer i,j
+      REAL dflx1
+      REAL atwid(in),vel1(in),tv1(in),v1twid1(in),s1flx1(in)
+     &                       ,tv2(in),v2twid1(in),s2flx1(in)
+      equivalence  (atwid,wi0),(vel1,wi1),(v1twid1,wi2)
+     &            ,(tv1,s1flx1,wi3),(v2twid1,wi4),(tv2,s2flx1,wi5)
+c
+      external x1intfc,x1intzc
+c\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\///////////////////////////////////
+c=======================================================================
+c  Check for 1-D problem in the 2-direction
+c
+      if (nx1z .le. 1) return
+c================ TRANSPORT 1-COMPONENT IN 1-DIRECTION  ================
+c  Compute time-centered area factors.
+c
+      do 10 i=is,ie
+        atwid(i) = g2bh(i)*g31bh(i)
+10    continue
+c
+c  Interpolate v1 to interfaces in the 1-direction. vel1 is
+c  the relative fluid velocity at interpolation points.
+c
+      do 100 j=js,je
+        do 20 i=ii(j),io(j)
+          vel1(i) = 0.5*(v1(i,j) - vg1(i) + v1(i+1,j) - vg1(i+1))
+20      continue
+        do 30 i=iim1(j),iop2(j)
+          tv1(i) = v1(i,j)
+30      continue
+        call x1intfc(tv1  ,vel1,j,iords1 ,istps1 ,v1twid1)
+c
+        do 40 i=ii(j),io(j)
+           dflx1 = 0.5*(mflx1(i,j) + mflx1(i+1,j))*atwid(i)
+          s1flx1 (i) = dflx1*v1twid1(i)
+40      continue
+c
+c  Perform advection using fluxes.  Note timestep dt is hidden in the
+c  fluxes.
+c
+        do 50 i=iip1(j),io(j)
+          s1(i,j) = (s1(i,j)*dvl1b(i)-(s1flx1(i)-s1flx1(i-1)))/dvl1bn(i)
+50      continue
+100   continue
+c
+c================  TRANSPORT 2-COMPONENT IN 1-DIRECTION  ===============
+c  Compute time centered area factor
+c
+      do 110 i=is,ie+1
+        atwid(i) = g2ah(i)*g31ah(i)
+110   continue
+c
+c  Interpolate v2 to zone faces in the 1-direction.
+c
+      do 200 j=js+1,je
+        do 120 i=ii(j),iop1(j)
+          vel1(i) = 0.5*((v1(i,j-1)-vg1(i)) + (v1(i,j)-vg1(i)))
+120     continue
+        do 130 i=iim2(j),iop2(j)
+          tv2(i) = v2(i,j)
+130     continue
+        call x1intzc(tv2  ,vel1,wi0,j,iords2 ,0,v2twid1 )
+c
+        do 140 i=ii(j),iop1(j)
+           dflx1 = 0.5*(mflx1(i,j-1) + mflx1(i,j))*atwid(i)
+          s2flx1 (i) = dflx1*v2twid1(i)*g2a(i)
+140     continue
+c
+c  Perform advection using fluxes.  Note timestep dt is hidden in the
+c  fluxes.
+c
+        do 150 i=ii(j),io(j)
+          s2(i,j) = (s2(i,j)*dvl1a(i)-(s2flx1(i+1)-s2flx1(i)))/dvl1an(i)
+150     continue
+200   continue
+c
+      return
+      end

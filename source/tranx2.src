@@ -1,0 +1,148 @@
+#include "zeus2d.def"
+c=======================================================================
+c//////////////////////////  SUBROUTINE TRANX2  \\\\\\\\\\\\\\\\\\\\\\\\
+c
+      subroutine tranx2(mflx2,s3)
+c
+c  PURPOSE:  Transports all zone centered variables in the 2-direction
+c  only.  Currently transported are: density
+c                                    energy density
+c                                    3-momentum
+c                                    3-magnetic field.
+c                                    radiation energy density
+c  The consistent transport algorithm is used, including the effects of
+c  grid compression.  The transported fluxes are thus given by the mass
+c  fluxes times the time centered area of the control volume faces times
+c  the interpolated variable. Interpolations are performed in X2INTZC.
+c
+c  INPUT ARGUMENTS:
+c   s3 = momentum density in 3-direction
+c
+c  OUTPUT ARGUMENTS:
+c   mflx2 = mass flux in 2-direction
+c   s3 = "half"-updated momentum density in 3-direction
+c
+c  EXTERNALS: X2INTZC
+c
+c  LOCALS:
+c-----------------------------------------------------------------------
+      implicit NONE
+#include "param.h"
+#include "root.h"
+#include "grid.h"
+#include "field.h"
+#include "scratch.h"
+      REAL    mflx2(in,jn),s3(in,jn)
+c
+      integer i,j
+      REAL atwid(in),vel2(jn),td(jn),eod2(jn),pr(jn),esc
+     &    ,dtwid2(jn),etwid2(jn)
+     &    ,dflx2(jn) ,eflx2(jn)
+      equivalence (atwid,wi0) , (vel2,wj1) , (eod2,eflx2,wj2)
+     &           ,(dtwid2,wj3)
+     &           ,(etwid2,wj4) , (td,dflx2,wj5),(pr,wj13)
+#ifdef ROTATE
+      REAL tv3(jn),v3twid2(jn),s3flx2(jn)
+      equivalence (v3twid2,wj7) , (tv3,s3flx2,wj8)
+#endif
+#ifdef MHD
+      REAL b3od2(jn),b3twid2(jn),b3flx2(jn)
+      equivalence (b3od2,b3flx2,wj9) , (b3twid2,wj0)
+#endif
+#ifdef RAD
+      REAL erod2(jn),ertwid2(jn),erflx2(jn),ersc,sasum
+      external sasum
+      equivalence (erod2,erflx2,wj11),(ertwid2,wj12)
+#endif
+c
+      external x2intzc
+c\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\///////////////////////////////////
+c=======================================================================
+c  Check for 1-D problem in 1-direction
+c  Compute time-centered area factor
+c
+      if (nx2z .le. 1) return
+      do 10 i=is,ie
+        atwid(i) = g31b(i)*dx1a(i)/dvl1a(i)
+10    continue
+      e sc = 1.0
+#ifdef RAD
+      ersc = sasum(in*jn,er,1)/float(nx1z*nx2z)
+      e sc = sasum(in*jn,e ,1)/float(nx1z*nx2z)
+#endif
+c
+c  Interpolate quantities to zone faces in the 2-direction.
+c  vel is the relative fluid velocity at interpolation points.
+c
+      do 100 i=is,ie
+        do 20 j=ji(i),jop1(i)
+          vel2(j) = v2(i,j) - vg2(j)
+20      continue
+        do 30 j=jim2(i),jop2(i)
+          td   (j) = d (i,j)
+          eod2 (j) = e (i,j)/d(i,j)/esc
+          if (gamma-1.0.eq.0.0) then
+            pr (j) = ciso**2*d(i,j)
+          else
+            pr (j) = (gamma-1.0)*e(i,j)
+          endif
+#ifdef ROTATE
+          tv3  (j) = v3(i,j)
+#endif
+#ifdef MHD
+          b3od2(j) = b3(i,j)/d(i,j)
+#endif
+#ifdef RAD
+          erod2(j) = er(i,j)/d(i,j)/ersc
+#endif
+30      continue
+        call x2intzc(td   ,vel2,pr,i,g2b,iordd ,istpd ,d twid2)
+        call x2intzc(e od2,vel2,pr,i,g2b,iorde ,   0  ,e twid2)
+#ifdef ROTATE
+        call x2intzc(tv3  ,vel2,pr,i,g2b,iords3,   0  ,v3twid2)
+#endif
+#ifdef MHD
+        call x2intzc(b3od2,vel2,pr,i,g2b,iordb3,   0  ,b3twid2)
+#endif
+#ifdef RAD
+        call x2intzc(erod2,vel2,pr,i,g2b,iorder,   0  ,ertwid2)
+#endif
+c
+c  Construct fluxes at interfaces, including the mass flux which is
+c  passed to MOMX1
+c
+        do 40 j=ji(i),jop1(i)
+          m flx2(i,j) = vel2(j)*dt*dtwid2(j)
+          d flx2(j) = mflx2(i,j)*atwid(i)*g32ah(j)
+          e flx2(j) = dflx2(  j)*e twid2(j)*esc
+#ifdef ROTATE
+          s3flx2(j) = dflx2(  j)*v3twid2(j)*g31b(i)*g32a(j)
+#endif
+#ifdef MHD
+          b3flx2(j) = mflx2(i,j)*b3twid2(j)/g2b(i)
+#endif
+#ifdef RAD
+          erflx2(j) = dflx2(  j)*ertwid2(j)*ersc
+#endif
+40      continue
+c
+c  Perform advection using fluxes.  Note timestep dt is hidden in the
+c  fluxes via the mass fluxes.
+c
+        do 50 j=ji(i),jo(i)
+          d (i,j) = (d (i,j)*dvl2a(j)-(d flx2(j+1)-d flx2(j)))/dvl2an(j)
+          e (i,j) = (e (i,j)*dvl2a(j)-(e flx2(j+1)-e flx2(j)))/dvl2an(j)
+#ifdef ROTATE
+          s3(i,j) = (s3(i,j)*dvl2a(j)-(s3flx2(j+1)-s3flx2(j)))/dvl2an(j)
+#endif
+#ifdef MHD
+          b3(i,j) = (b3(i,j)*d x2a(j)-(b3flx2(j+1)-b3flx2(j)))/d x2an(j)
+#endif
+#ifdef RAD
+          er(i,j) = (er(i,j)*dvl2a(j)-(erflx2(j+1)-erflx2(j)))/dvl2an(j)
+#endif
+50      continue
+100   continue
+c
+      return
+      end

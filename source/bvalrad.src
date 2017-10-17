@@ -1,0 +1,143 @@
+#include "zeus2d.def"
+c=======================================================================
+c//////////////////////////  SUBROUTINES BVAL*  \\\\\\\\\\\\\\\\\\\\\\\\
+c
+c  PURPOSE:  These routines set the boundary values for the radiation
+c  energy density at the old and new timestep needed during the NR
+c  iterations of the moment equations.  The same boundary tyes as
+c  implemented for the hydrodynamical variables are implemented here.
+c
+c\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\///////////////////////////////
+c=======================================================================
+c
+c---------------  radiation energy density boundary values  ------------
+c
+      subroutine bvaler
+#ifdef RAD
+      implicit NONE
+#include "param.h"
+#include "grid.h"
+#include "field.h"
+#include "bndry.h"
+      integer i,j
+c
+c  inner i boundary
+cdir$ ivdep
+      do 10 j=js,je
+        if (liib(j) .eq. 1)  er(iim1(j),j) = er    (ii  (j),j)
+        if (liib(j) .eq. 2)  er(iim1(j),j) = er    (ii  (j),j)
+        if (liib(j) .eq. 3)  er(iim1(j),j) = eriim1(        j)
+        if (liib(j) .eq. 4)  er(iim1(j),j) = er    (io  (j),j)
+                             er(iim2(j),j) = er    (iim1(j),j)
+        if (liib(j) .eq. 1)  er(iim2(j),j) = er    (iip1(j),j)
+        if (liib(j) .eq. 3)  er(iim2(j),j) = eriim2(        j)
+        if (liib(j) .eq. 4)  er(iim2(j),j) = er    (iom1(j),j)
+10    continue
+c
+c  outer i boundary
+cdir$ ivdep
+      do 20 j=js,je
+        if (loib(j) .eq. 1)  er(iop1(j),j) = er    (io  (j),j)
+        if (loib(j) .eq. 2)  er(iop1(j),j) = er    (io  (j),j)
+        if (loib(j) .eq. 3)  er(iop1(j),j) = eriop1(        j)
+        if (loib(j) .eq. 4)  er(iop1(j),j) = er    (ii  (j),j)
+                             er(iop2(j),j) = er    (iop1(j),j)
+        if (loib(j) .eq. 1)  er(iop2(j),j) = er    (iom1(j),j)
+        if (loib(j) .eq. 3)  er(iop2(j),j) = eriop2(        j)
+        if (loib(j) .eq. 4)  er(iop2(j),j) = er    (iip1(j),j)
+20    continue
+c
+c  inner j boundary 
+cdir$ ivdep
+      do 30 i=is-2,ie+2
+        if (lijb(i) .eq. 1)  er(i,jim1(i)) = er    (i,ji  (i))
+        if (lijb(i) .eq. 2)  er(i,jim1(i)) = er    (i,ji  (i))
+        if (lijb(i) .eq. 3)  er(i,jim1(i)) = erjim1(i        )
+        if (lijb(i) .eq. 4)  er(i,jim1(i)) = er    (i,jo  (i))
+                             er(i,jim2(i)) = er    (i,jim1(i))
+        if (lijb(i) .eq. 1)  er(i,jim2(i)) = er    (i,jip1(i))
+        if (lijb(i) .eq. 3)  er(i,jim2(i)) = erjim2(i        )
+        if (lijb(i) .eq. 4)  er(i,jim2(i)) = er    (i,jom1(i))
+30    continue
+c
+c  outer j boundary
+cdir$ ivdep
+      do 40 i=is-2,ie+2
+        if (lojb(i) .eq. 1)  er(i,jop1(i)) = er    (i,jo  (i))
+        if (lojb(i) .eq. 2)  er(i,jop1(i)) = er    (i,jo  (i))
+        if (lojb(i) .eq. 3)  er(i,jop1(i)) = erjop1(i        )
+        if (lojb(i) .eq. 4)  er(i,jop1(i)) = er    (i,ji  (i))
+                             er(i,jop2(i)) = er    (i,jop1(i))
+        if (lojb(i) .eq. 1)  er(i,jop2(i)) = er    (i,jom1(i))
+        if (lojb(i) .eq. 3)  er(i,jop2(i)) = erjop2(i        )
+        if (lojb(i) .eq. 4)  er(i,jop2(i)) = er    (i,jip1(i))
+40    continue
+#endif
+      return
+      end
+c
+c------------  new radiation energy density boundary values  -----------
+c
+      subroutine bvalern
+#ifdef RAD
+      implicit NONE
+#include "param.h"
+#include "grid.h"
+#include "bndry.h"
+#include "radiation.h"
+      integer i,j
+c
+c  inner i boundary
+cdir$ ivdep
+      do 10 j=js,je
+        if (liib(j) .eq. 1)  ern(iim1(j),j) = ern   (ii  (j),j)
+        if (liib(j) .eq. 2)  ern(iim1(j),j) = ern   (ii  (j),j)
+        if (liib(j) .eq. 3)  ern(iim1(j),j) = eriim1(        j)
+        if (liib(j) .eq. 4)  ern(iim1(j),j) = ern   (io  (j),j)
+                             ern(iim2(j),j) = ern   (iim1(j),j)
+        if (liib(j) .eq. 1)  ern(iim2(j),j) = ern   (iip1(j),j)
+        if (liib(j) .eq. 3)  ern(iim2(j),j) = eriim2(        j)
+        if (liib(j) .eq. 4)  ern(iim2(j),j) = ern   (iom1(j),j)
+10    continue
+c
+c  outer i boundary
+cdir$ ivdep
+      do 20 j=js,je
+        if (loib(j) .eq. 1)  ern(iop1(j),j) = ern   (io  (j),j)
+        if (loib(j) .eq. 2)  ern(iop1(j),j) = ern   (io  (j),j)
+        if (loib(j) .eq. 3)  ern(iop1(j),j) = eriop1(        j)
+        if (loib(j) .eq. 4)  ern(iop1(j),j) = ern   (ii  (j),j)
+                             ern(iop2(j),j) = ern   (iop1(j),j)
+        if (loib(j) .eq. 1)  ern(iop2(j),j) = ern   (iom1(j),j)
+        if (loib(j) .eq. 3)  ern(iop2(j),j) = eriop2(        j)
+        if (loib(j) .eq. 4)  ern(iop2(j),j) = ern   (iip1(j),j)
+20    continue
+c
+c  inner j boundary 
+cdir$ ivdep
+      do 30 i=is-2,ie+2
+        if (lijb(i) .eq. 1)  ern(i,jim1(i)) = ern   (i,ji  (i))
+        if (lijb(i) .eq. 2)  ern(i,jim1(i)) = ern   (i,ji  (i))
+        if (lijb(i) .eq. 3)  ern(i,jim1(i)) = erjim1(i        )
+        if (lijb(i) .eq. 4)  ern(i,jim1(i)) = ern   (i,jo  (i))
+                             ern(i,jim2(i)) = ern   (i,jim1(i))
+        if (lijb(i) .eq. 1)  ern(i,jim2(i)) = ern   (i,jip1(i))
+        if (lijb(i) .eq. 3)  ern(i,jim2(i)) = erjim2(i        )
+        if (lijb(i) .eq. 4)  ern(i,jim2(i)) = ern   (i,jom1(i))
+30    continue
+c
+c  outer j boundary
+cdir$ ivdep
+      do 40 i=is-2,ie+2
+        if (lojb(i) .eq. 1)  ern(i,jop1(i)) = ern   (i,jo  (i))
+        if (lojb(i) .eq. 2)  ern(i,jop1(i)) = ern   (i,jo  (i))
+        if (lojb(i) .eq. 3)  ern(i,jop1(i)) = erjop1(i        )
+        if (lojb(i) .eq. 4)  ern(i,jop1(i)) = ern   (i,ji  (i))
+                             ern(i,jop2(i)) = ern   (i,jop1(i))
+        if (lojb(i) .eq. 1)  ern(i,jop2(i)) = ern   (i,jom1(i))
+        if (lojb(i) .eq. 3)  ern(i,jop2(i)) = erjop2(i        )
+        if (lojb(i) .eq. 4)  ern(i,jop2(i)) = ern   (i,jip1(i))
+40    continue
+#endif
+      return
+      end

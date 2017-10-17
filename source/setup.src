@@ -1,0 +1,704 @@
+#include "zeus2d.def"
+c=======================================================================
+c////////////////////////  SUBROUTINE SETUP  \\\\\\\\\\\\\\\\\\\\\\\\\\\
+c
+      subroutine setup
+c
+c  PURPOSE: Setups execution of a new run by initializing all variables
+c  according to the flags and values in the input deck.  Calls PROBLEM
+c  a CPP macro) to initialize field variables for the particular
+c  problem to be studied, otherwise field variables are set to "tiny"
+c  (parameter defined to be smallest number possible on machine).  Note
+c  user must define PROBLEM to be the appropriate subroutine name in the
+c  file ZEUS2D.DEF and in the Make command line
+c
+c  EXTERNALS:
+c     ggen    -- initializes grid according to input deck
+c     PROBLEM -- macroname which is defined to be the user supplied
+c                subroutine name which initializes field variables for
+c                the problem to be studied
+c     bval*   -- boundary value routines
+c     nudt    -- computes initial timestep
+c     newgrid -- computes new grid position for moving grid
+c     scopy
+c
+c  LOCALS:
+c-----------------------------------------------------------------------
+      implicit NONE
+#include "param.h"
+#include "grid.h"
+#include "field.h"
+#include "bndry.h"
+#include "scratch.h"
+#include "root.h"
+#include "gravity.h"
+#include "radiation.h"
+      integer  i,j,iiyes,ioyes
+      REAL     dtrat,dtmini2,v1zc,v2zc
+c
+      external empty,ggen,bvald,bvale,bvalv1,bvalv2,scopy
+      external nudt,newgrid,PROBLEM
+#ifdef ROTATE
+      external bvalv3
+#endif
+#ifdef MHD
+      REAL bsq
+      external bvalb3
+#endif
+#ifdef GRAV
+      integer imax,isamax
+      REAL    dmax
+      external isamax
+#endif
+      namelist /pcon/ nlim,tlim
+      namelist /hycon/
+     &  qcon,qlin,courno,dtrat
+     & ,iordd,iorde,iords1,iords2,iords3,iordb1,iordb2,iordb3,iorder
+     & ,istpd,istpe,istps1,istps2,istps3,istpb1,istpb2,istpb3,istper
+     & ,dfloor,efloor,v1floor,v2floor,v3floor,emffloor
+     & ,b1floor,b2floor,b3floor,erfloor
+      namelist /iib/ ii, niib, miib, liib, b3iib
+     &,  diim1,  eiim1, v1ii  , v2iim1, v3iim1, b3iim1, emfii
+     &,  diim2,  eiim2, v1iim1, v2iim2, v3iim2, b3iim2, emfiim1, emfiim2
+     &, eriim1, eriim2
+      namelist /oib/ io, noib, moib, loib, b3oib
+     &,  diop1,  eiop1, v1iop1, v2iop1, v3iop1, b3iop1, emfiop1
+     &,  diop2,  eiop2, v1iop2, v2iop2, v3iop2, b3iop2, emfiop2, emfiop3
+     &, eriop1, eriop2
+      namelist /ijb/     nijb, mijb, lijb, b3ijb
+     &,  djim1,  ejim1, v1jim1, v2ji  , v3jim1, b3jim1, emfji
+     &,  djim2,  ejim2, v1jim2, v2jim1, v3jim2, b3jim2, emfjim1, emfjim2
+     &, erjim1, erjim2
+      namelist /ojb/     nojb, mojb, lojb, b3ojb
+     &,  djop1,  ejop1, v1jop1, v2jop1, v3jop1, b3jop1, emfjop1
+     &,  djop2,  ejop2, v1jop2, v2jop2, v3jop2, b3jop2, emfjop2, emfjop3
+     &, erjop1, erjop2
+      namelist /grvcon/ isymm,g,ptmass,izero,igriib,igroib,igrijb,igrojb
+     &                 ,epsgrv,maxgrv,ks0grv,phibverr,phibvnmx,graverr
+      namelist /radcon/ c,ifld,epsme,demax,dermax,dtotmax,nmeiter,radth
+     &, epsrad,maxrad,ks0rad,iorad
+      namelist /eqos/ gamma, ciso
+      namelist /gcon/ x1fac,x2fac,igcon
+c=======================================================================
+c\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\///////////////////////////////////
+c
+c------------------------  PROBLEM CONTROL  ---------------------------
+c
+c   nlim   = cycles to run
+c   tlim   = physical (problem) time to stop calculation
+c
+      nlim   = 1 000 000
+      tlim   = 0.0
+      nred   = 0
+c
+      rewind 1
+      read (1,pcon)
+      write(2,pcon)
+c
+c------------------------  HYDRO CONTROL  ------------------------------
+c
+c  qcon   = quadratic artificial viscosity (q) constant
+c  qlin   = linear    artificial viscosity (q) constant
+c  courno = courant number
+c  dtrat  = ratio of initial dt to dtmin (used to compute dtmin below)
+c  iord** = order of advection scheme to be used for variable **
+c  iostp**= steepening flag for 3rd order advection.  When istp**=1,
+c           use the discontinuity detection to steepen shocks during
+c           interpolation for variable ** in X1INT,X1INTFC,X2INT,X2INTFC
+c  **floor = smallest value desired for variable ** on grid
+c
+      qcon   = 2.0
+      qlin   = 0.0
+      courno = 0.5
+      dtrat  = 1.0e-3
+      iordd  = 2
+      iorde  = 2
+      iords1 = 2
+      iords2 = 2
+      iords3 = 2
+      iordb1 = 2
+      iordb2 = 2
+      iordb3 = 2
+      iorder = 2
+      istpd  = 0
+      istpe  = 0
+      istps1 = 0
+      istps2 = 0
+      istps3 = 0
+      istpb1 = 0
+      istpb2 = 0
+      istpb3 = 0
+      istper = 0
+      d floor = tiny
+      e floor = tiny
+      v1floor = tiny
+      v2floor = tiny
+      v3floor = tiny
+      emffloor= tiny
+      b1floor = tiny
+      b2floor = tiny
+      b3floor = tiny
+      erfloor = tiny
+c
+      read (1,hycon)
+      write(2,hycon)
+c
+c-------------------------  INITIALIZE GRID  ---------------------------
+c  ggen reads ggen1 and ggen2 
+c
+      call ggen
+c
+c------------------------  BOUNDARY CONTROL ----------------------------
+c
+c  The following points describe how boundaries are handled:
+c
+c*1)  We may specify any of 4 fluid boundary conditions independently at
+c  every zone on the problem boundary.  The problem i boundaries may be
+c  irregular to treat steps and cavities (resulting in irregular j
+c  boundaries as well).
+c     ii(j) is  i  index of first active zone for sweep  j
+c     io(j) is  i  index of last  active zone for sweep  j
+c     ji(i) is  j  index of first active zone for sweep  i # calculated
+c     jo(i) is  j  index of last  active zone for sweep  i # from ii,io
+c  The boundary type is specified by nflo, where
+c     nflo = 1   reflecting
+c          =-1   reflecting with inversion of 3-velocity
+c          = 2   flow out 
+c          = 3   flow in 
+c          = 4   periodic
+c   then,    niib(j) is nflo of inner i boundary on sweep j
+c            noib(j) is nflo of outer i boundary on sweep j
+c            nijb(i) is nflo of inner j boundary on sweep i
+c            nojb(i) is nflo of outer j boundary on sweep i
+c
+c*2) Since the mhd boundary types may differ from the fluid boundary
+c  types, we may specify the former independently of the latter.  Thus,
+c  the mhd boundary types are specified by mflo,where
+c     mflo = 1   reflecting
+c          =-1   reflecting with inversion of 3-magnetic field
+c          = 2   flow out
+c          = 3   flow in
+c          = 4   periodic
+c  Values for mflo are stored in miib,moib,mijb,mojb.
+c
+c*3) Since the radiation boundary types may differ from both the fluid
+c  and mhd boundary types,we may specify the former independent of the
+c  others.  The boundary flag values follow the above conventions.
+c
+c*4) To be completely general, we allow the boundary flag for each
+c  variable to be set independent of all others.  This can be done by
+c  setting values for the flags in the namelists, eg:
+c   diib,doib,dijb,dojb = flags on boundaries for d
+c  If no values are input for each individual variable, then the flags
+c  are initialized using the values for nflo,mflo above.
+c
+c*5) For flow in boundaries, boundary values of d,e,v1,v2,[v3],...
+c  must be input, for example:
+c      diim1(j) is inner i boundary density for sweep j at iim1(j)
+c      diim2(j) is inner i boundary density for sweep j at iim2(j)
+c      diop1(j) is outer i boundary density for sweep j
+c      djim1(i) is inner j boundary density for sweep i
+c      djop1(i) is outer j boundary density for sweep i
+c
+c*6) Since the corner zones [(ii-1,ji-1),(io+1,ji-1),etc] are set across
+c  the ijb or ojb, then all i boundary values must be specified for
+c  j=js,je and all j boundary values must be specified for i=is-2,ie+2
+c
+      do 10 j=js,je
+        ii  (j) = is
+        io  (j) = ie
+        niib(j) = 1
+        noib(j) = 1
+        miib(j) = 1
+        moib(j) = 1
+        liib(j) = 1
+        loib(j) = 1
+c
+         b3iib(j) = 0
+         b3oib(j) = 0
+c
+        d iim1(j) = d floor
+        d iim2(j) = d floor
+        d iop1(j) = d floor
+        d iop2(j) = d floor
+        e iim1(j) = e floor
+        e iim2(j) = e floor
+        e iop1(j) = e floor
+        e iop2(j) = e floor
+        v1ii  (j) = v1floor
+        v1iim1(j) = v1floor
+        v1iop1(j) = v1floor
+        v1iop2(j) = v1floor
+        v2iim1(j) = v2floor
+        v2iim2(j) = v2floor
+        v2iop1(j) = v2floor
+        v2iop2(j) = v2floor
+c
+        v3iim1(j) = v3floor
+        v3iim2(j) = v3floor
+        v3iop1(j) = v3floor
+        v3iop2(j) = v3floor
+c
+       emfii  (j) =emffloor
+       emfiim1(j) =emffloor
+       emfiim2(j) =emffloor
+       emfiop1(j) =emffloor
+       emfiop2(j) =emffloor
+       emfiop3(j) =emffloor
+        b3iim1(j) = b3floor
+        b3iim2(j) = b3floor
+        b3iop1(j) = b3floor
+        b3iop2(j) = b3floor
+c
+        eriim1(j) = erfloor
+        eriim2(j) = erfloor
+        eriop1(j) = erfloor
+        eriop2(j) = erfloor
+10    continue
+      do 20 i=is-2,ie+2
+c  ji and  jo initialized to 0 since they are computed below
+        ji  (i) = 0 
+        jo  (i) = 0
+        nijb(i) = 1
+        nojb(i) = 1
+        mijb(i) = 1
+        mojb(i) = 1
+        lijb(i) = 1
+        lojb(i) = 1
+c
+         b3ijb(i) = 0
+         b3ojb(i) = 0
+c
+        d jim1(i) = d floor
+        d jim2(i) = d floor
+        d jop1(i) = d floor
+        d jop2(i) = d floor
+        e jim1(i) = e floor
+        e jim2(i) = e floor
+        e jop1(i) = e floor
+        e jop2(i) = e floor
+        v1jim1(i) = v1floor
+        v1jim2(i) = v1floor
+        v1jop1(i) = v1floor
+        v1jop2(i) = v1floor
+        v2ji  (i) = v2floor
+        v2jim1(i) = v2floor
+        v2jop1(i) = v2floor
+        v2jop2(i) = v2floor
+c
+        v3jim1(i) = v3floor
+        v3jim2(i) = v3floor
+        v3jop1(i) = v3floor
+        v3jop2(i) = v3floor
+c
+       emfji  (i) =emffloor
+       emfjim1(i) =emffloor
+       emfjim2(i) =emffloor
+       emfjop1(i) =emffloor
+       emfjop2(i) =emffloor
+       emfjop3(i) =emffloor
+        b3jim1(i) = b3floor
+        b3jim2(i) = b3floor
+        b3jop1(i) = b3floor
+        b3jop2(i) = b3floor
+c
+        erjim1(i) = erfloor
+        erjim2(i) = erfloor
+        erjop1(i) = erfloor
+        erjop2(i) = erfloor
+20    continue
+c
+c  set boundaries, order is iib, oib, ijb, ojb
+c
+      read (1,iib)
+      write(2,iib)
+c
+      read (1,oib)
+      write(2,oib)
+c
+      read (1,ijb)
+      write(2,ijb)
+c
+      read (1,ojb)
+      write(2,ojb)
+c
+c  Load boundary flags from nflo and mflo if not set when reading
+c  namelists (in which case the flags are zero)
+c
+      do 30 j=js,je
+        if ( b3iib(j) .eq. 0)  b3iib(j) = miib(j)
+        if ( b3oib(j) .eq. 0)  b3oib(j) = moib(j)
+30    continue
+      do 40 i=is-2,ie+2
+        if ( b3ijb(i) .eq. 0)  b3ijb(i) = mijb(i)
+        if ( b3ojb(i) .eq. 0)  b3ojb(i) = mojb(i)
+40    continue
+c
+c  Reset grid indices based on input starting and ending indices.
+c
+      ii(js-1) = ii(js)
+      ii(js-2) = ii(js)
+      ii(je+1) = ii(je)
+      ii(je+2) = ii(je)
+      io(js-1) = io(js)
+      io(js-2) = io(js)
+      io(je+1) = io(je)
+      io(je+2) = io(je)
+      do 50 j=js-2,je+2
+        iim2(j) = ii(j) - 2
+        iim1(j) = ii(j) - 1
+        iip1(j) = ii(j) + 1
+        iip2(j) = ii(j) + 2
+        iom2(j) = io(j) - 2
+        iom1(j) = io(j) - 1
+        iop1(j) = io(j) + 1
+        iop2(j) = io(j) + 2
+        iop3(j) = io(j) + 3
+50    continue
+c
+c  Compute starting and ending j indices from starting and ending i
+c  indices (since they are NOT independent).  Note corner values must be
+c  included, i.e. values for i=is-2,ie+2 are needed.
+c
+      iiyes = 0
+      ioyes = 0
+      do 70 j=js,je
+        do 60 i=ii(j),io(j)
+          if (ji(i) .eq. 0) ji(i) = j
+60      continue
+        if (ii(j) .eq. is) iiyes = 1
+        if (io(j) .eq. ie) ioyes = 1
+        if (iiyes .eq. 1 .and. ioyes .eq. 1) goto 71
+70    continue
+71    continue
+c
+      iiyes = 0
+      ioyes = 0
+      do 90 j=je,js,-1
+        do 80 i=ii(j),io(j)
+          if (jo(i) .eq. 0) jo(i) = j
+80      continue
+        if (ii(j) .eq. is) iiyes = 1
+        if (io(j) .eq. ie) ioyes = 1
+        if (iiyes .eq. 1 .and. ioyes .eq. 1) goto 91
+90    continue
+91    continue
+c
+      ji(is-1) = ji(is)
+      ji(is-2) = ji(is)
+      ji(ie+1) = ji(ie)
+      ji(ie+2) = ji(ie)
+      jo(is-1) = jo(is)
+      jo(is-2) = jo(is)
+      jo(ie+1) = jo(ie)
+      jo(ie+2) = jo(ie)
+c
+      do 100 i=is-2,ie+2
+        jim2(i) = ji(i) - 2
+        jim1(i) = ji(i) - 1
+        jip1(i) = ji(i) + 1
+        jip2(i) = ji(i) + 2
+        jom2(i) = jo(i) - 2
+        jom1(i) = jo(i) - 1
+        jop1(i) = jo(i) + 1
+        jop2(i) = jo(i) + 2
+        jop3(i) = jo(i) + 3
+100   continue
+c  Compute maximum number of active zones in x1 [x2], and number of
+c  active zones for each j [i] sweep
+      nx1z = ie - is + 1
+      nx2z = je - js + 1
+      do 110 j=js,je
+        nx1(j) = io(j) - ii(j) + 1
+110   continue
+      do 120 i=is-2,ie+2
+        nx2(i) = jo(i) - ji(i) + 1
+120   continue
+c
+c------------------------  GRAVITY CONTROL  ----------------------------
+c
+c  Gravitational self-potentials can be included in both 1-D and 2-D
+c  problems by solving the Poisson equation in the GRAVITY module.
+c  Point mass potentials are included directly in the momentum eqn
+c  by using a non-zero value for the variable ptmass.  Point mass
+c  potentials do not require defining GRAV, do not call the GRAVITY
+c  module, and are not included in the array phi but are explicitely
+c  added to the momentum eqn terms in the routines STV1 and STV2.
+c     g      = gravitational constant
+c     ptmass = fixed central point mass object
+c     izero  = i index of Z=0 (x1=0) for odd symmetry case
+c              (cylindrical geometry only)
+c     igrijb = ijb flag (0 for     symmetric (Dirichlet) boundary      )
+c                       (1 for non-symmetric             boundary whose
+c                        value is calculated using multipole expansion )
+c     igrojb = ojb flag ("  "      "          "         "              )
+c     epsgrv = error limit              for ICCGAF
+c     maxgrv = maximum iteration count  for ICCGAF
+c     ks0grv = level of cyclic reduction in ICCGAF
+c     phibverr = error criteria for multipole moments in PHIBV
+c     phibvnmx = max number of moments to be taken in PHIBV
+c      graverr = error criteria for computing a soln in GRAVITY
+c
+      g      = 6.667e-8
+      ptmass = 0.0
+      izero  = is
+      igriib = 0
+      igroib = 0
+      igrijb = 0
+      igrojb = 0
+      epsgrv = 1.0e-12
+      maxgrv = 200
+      ks0grv = 99
+      phibverr = 1.0e-6
+      phibvnmx = 25
+      graverr  = 1.0e-3
+c
+      read (1,grvcon)
+      write(2,grvcon)
+c
+c------------------------  RADIATION CONTROL  --------------------------
+c
+c   c      = speed of light
+c   ifld   = choice of flux limiters
+c   epsme  = error criterion for NR convergence (WH80s uses 1.0e-5)
+c demax,dermax = max relative change allowed in e,er in a single NR iter
+c   dtotmax= max total relative change allowed over all NR iterations
+c   nmeiter= max number of NR iterations allowed (WH80s uses 20)
+c   radth  = "theta" time centering parameter
+c     epsrad = error limit              for ICCGAF
+c     maxrad = maximum iteration count  for ICCGAF
+c     ks0rad = level of cyclic reduction in ICCGAF
+c   iorad = 1 to dump convergence data for NR iterations
+c
+      c      = 2.998e10
+      ifld   = 1
+      epsme  = 1.0e-08
+      de  max= 0.2
+      der max= 0.2
+      dtotmax= 0.2
+      nmeiter= 20
+      radth  = 0.55
+      epsrad = 1.0e-12
+      maxrad = 200
+      ks0rad = 99
+      iorad = 0
+c
+      read (1,radcon)
+      write(2,radcon)
+c
+c------------------------  EQUATION OF STATE  --------------------------
+c
+c      gamma = ratio of specific heats
+c      ciso  = isothermal sound speed
+c
+      gamma = 0.0
+      ciso  = 0.0
+c
+      read (1,eqos)
+      write(2,eqos)
+c
+c-------------------------  PROBLEM GENERATOR  -------------------------
+c
+c  PROBLEM is a user defined cpp macroname representing a subroutine
+c  which intializes all field variables for the particular problem to
+c  be studied.  PROBLEM should initialize all arrays for active zones
+c  only (boundary values set in BVAL** routines) EXCEPT FOR B1 AND B2.
+c  Note to satisfy the constraint DIV(B)=0, PROBLEM should initialize
+c  b1 and b2 on the boundaries using some vector potential function.
+c  BOUNDARY VALUES FOR B1 OR B2 CANNOT BE SET IN BVAL** ROUTINES.
+c  Begin by initializing all field variables to default values.
+c
+      do 160 j=js,je
+        do 150 i=ii(j),io(j)
+          d (i,j) = dfloor
+          e (i,j) = efloor
+#ifdef ROTATE
+          v3(i,j) = v3floor
+#endif
+#ifdef MHD
+          b3(i,j) = b3floor
+#endif
+#ifdef RAD
+          er(i,j) = erfloor
+#endif
+150     continue
+160   continue
+      do 180 j=js,je
+        do 170 i=iip1(j),io(j)
+          v1(i,j) = v1floor
+170     continue
+180   continue
+      do 200 i=is,ie
+        do 190 j=jip1(i),jo(i)
+          v2(i,j) = v2floor
+190     continue
+200   continue
+#ifdef MHD
+      do 220 i=is-2,ie+2
+        do 210 j=jim1(i),jop2(i)
+          b1(i,j) = b1floor
+210     continue
+220   continue
+      do 240 j=js-2,je+2
+        do 230 i=iim1(j),iop2(j)
+          b2(i,j) = b2floor
+230     continue
+240   continue
+#endif
+      call PROBLEM
+  
+	  	 
+c
+c  Set boundary zones
+c
+      call bvald
+      call bvale
+      call bvalv1
+      call bvalv2
+#ifdef ROTATE
+      call bvalv3
+#endif
+#ifdef MHD
+      call bvalb3
+#endif
+#ifdef RAD
+      call bvaler
+#endif
+c
+c  Set initial gravitational potential
+c
+#ifdef GRAV
+      imax = 0
+      dmax = 0.0
+      do 250 j=js,je
+        imax = isamax(nx1(j),d(ii(j),j),1) + iim1(j)
+        if (d(imax,j) .gt. dmax) dmax = d(imax,j)
+250   continue
+      do 270 j=js-1,je+1
+        do 260 i=iim1(j),iop1(j)
+          phi(i,j) = 4.0*pi*g*dmax*(dx1b(i)**2 + (g2b(i)*dx2b(j))**2)
+260     continue
+270   continue
+      call gravity
+#endif
+#ifdef RAD
+c
+c  Set initial geuss for de and der.
+c
+      do 290 j=js,je
+        do 280 i=is,ie
+          de (i,j) = 1.0e-6*e (i,j)
+          der(i,j) = 1.0e-6*er(i,j)
+280     continue
+290   continue
+#endif
+c
+c-------------------------  GRID MOTION CONTROL  -----------------------
+c
+c        igcon = 1 and x1fac < 0 gives "lagrangian" tracking in x1 lines
+c        igcon = 1 and x2fac < 0 gives "lagrangian" tracking in x2 lines
+c        igcon = 2 for input grid boundary speeds
+c                vg1(io) = x1fac * central soundspeed
+c                vg2(jo) = x2fac * central soundspeed
+c        igcon = 3 for constant motion at x1[2]fac
+c
+      x1fac = 0.0
+      x2fac = 0.0
+      igcon = 0
+c
+      read (1,gcon)
+      write(2,gcon)
+      do 300 i=is-2,ie+2
+        vg1(i) = 0.0
+300   continue
+      do 310 j=js-2,je+2
+        vg2(j) = 0.0
+310   continue
+c
+c----------------------  INITIAL TIMESTEP  -----------------------------
+c  dtmin is initially an order of magnitude estimate of the initial
+c  timestep.  NUDT is then called to refine that estimate.  This avoids
+c  getting warnings from NUDT the first time it is called.  Note grid
+c  must be assumed to be stationary initially (cannot compute grid v's)
+c
+      if ((gamma-1.0) .eq. 0.0) then
+        dtmini2 = ciso**2/(  min(dx1a(is),g2b(is)*dx2a(ji(is))))**2
+      else
+        dtmini2 = e(is,ji(is))/
+     &          (d(is,ji(is))*(  min(dx1a(is),g2b(is)*dx2a(ji(is))))**2)
+      endif
+      v1zc = 0.5*(v1(is,ji(is)) + v1(is+1,ji  (is)))
+      v2zc = 0.5*(v2(is,ji(is)) + v2(is  ,jip1(is)))
+      dtmini2 = dtmini2 + (v1zc         *dx1ai(is    ) )**2
+      dtmini2 = dtmini2 + (v2zc/(g2b(is)*dx2a (ji(is))))**2
+#ifdef MHD
+      bsq =       0.25*  (b1(is,ji(is)  ) + b1(is  ,ji(is)+1))**2
+      bsq = bsq + 0.25*  (b2(is,ji(is)  ) + b2(is+1,ji(is)  ))**2
+      bsq = bsq + b3(is,ji(is))**2
+      dtmini2 = dtmini2 + bsq/
+     &   (4.0*pi*d(is,ji(is))*(  min(dx1a(is),g2b(is)*dx2a(ji(is))))**2)
+#endif
+#ifdef RAD
+      dtmini2 = dtmini2 + c**2/(  min(dx1a(is),g2b(is)*dx2a(ji(is))))**2
+#endif
+      dt    = courno/sqrt(dtmini2)
+      dtmin = dtrat*dt
+      call nudt
+      dtmin = dtrat*dt
+c
+c  Reset initial timestep if grid is moving to a small number
+c
+#ifdef RAD
+      dt = 5.0*dtmin
+#endif
+      if (x1fac .ne. 0.0 .or. x2fac .ne. 0.0) dt = 5.0*dtmin
+c
+c-----------------------  INITIALIZE NEW GRID  -------------------------
+c  store initial x1 and x2 grids into "n+1/2" and "n+1" grid lines,
+c  compute grid velocities, and new grid positions [in routine newgrid].
+c  Note newgrid will recompute "n+1/2" and "n+1" grid lines, but only
+c  if x1fac or x2fac .ne. 0.  The "n+1/2" and "n+1" grid lines are
+c  initialized to the old values in case the grid never moves.  Note
+c  newgrid must be called after nudt since it needs the timestep.  Thus,
+c  the initial timestep computed above did not account for grid motion.
+c
+      call scopy(in, x1a ,1, x1an ,1)
+      call scopy(in, x1b ,1, x1bn ,1)
+      call scopy(in,dx1a ,1,dx1an ,1)
+      call scopy(in,dx1b ,1,dx1bn ,1)
+      call scopy(in, g2a ,1, g2ah ,1)
+      call scopy(in, g2a ,1, g2an ,1)
+      call scopy(in, g2b ,1, g2bh ,1)
+      call scopy(in, g2b ,1, g2bn ,1)
+      call scopy(in, g31a,1, g31ah,1)
+      call scopy(in, g31a,1, g31an,1)
+      call scopy(in, g31b,1, g31bh,1)
+      call scopy(in, g31b,1, g31bn,1)
+      call scopy(in,dvl1a,1,dvl1an,1)
+      call scopy(in,dvl1b,1,dvl1bn,1)
+c
+      call scopy(jn, x2a ,1, x2an ,1)
+      call scopy(jn, x2b ,1, x2bn ,1)
+      call scopy(jn,dx2a ,1,dx2an ,1)
+      call scopy(jn,dx2b ,1,dx2bn ,1)
+      call scopy(jn, g32a,1, g32ah,1)
+      call scopy(jn, g32a,1, g32an,1)
+      call scopy(jn, g32b,1, g32bh,1)
+      call scopy(jn, g32b,1, g32bn,1)
+      call scopy(jn, g4 a,1, g4 ah,1)
+      call scopy(jn, g4 a,1, g4 an,1)
+      call scopy(jn, g4 b,1, g4 bh,1)
+      call scopy(jn, g4 b,1, g4 bn,1)
+      call scopy(jn,dvl2a,1,dvl2ah,1)
+      call scopy(jn,dvl2a,1,dvl2an,1)
+      call scopy(jn,dvl2b,1,dvl2bh,1)
+      call scopy(jn,dvl2b,1,dvl2bn,1)
+c
+      call newgrid
+c
+c------------------------  Initialize everything else  -----------------
+c
+      ix1x2 = 1
+c
+      return
+      end

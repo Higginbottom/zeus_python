@@ -1,0 +1,85 @@
+#include "zeus2d.def"
+c=======================================================================
+c/////////////////////////  SUBROUTINE GRADV  \\\\\\\\\\\\\\\\\\\\\\\\\\
+c
+      subroutine gradv
+#ifdef RAD
+c
+c  PURPOSE: This routine computes the components of the velocity
+c  gradient tensor.  The dv3i and dvi3 [i=1,2] componants are not
+c  needed since the corresponding tensor
+c  variable Eddington factor components are zero, and the velocity
+c  gradient always appears as the product GRAD(v):fE.  The velocity
+c  divergence DIV(v) is also computed here.  Note that although
+c  DIV(v) = dv11 + dv22 + dv33, we use the full coordinate independent
+c  formula to compute DIV(v) separately for accuracy.  The dv11,dv22,
+c  dv33 and divv are zone centered.  The dv12 and dv21 are averaged to
+c  zone centers.
+c
+c  EXTERNALS: [none]
+c
+c  LOCALS:
+c   dv** = ** component of the velocity gradient tensor
+c   divv = DIV(v)
+c-----------------------------------------------------------------------
+      implicit NONE
+#include "param.h"
+#include "grid.h"
+#include "field.h"
+#include "scratch.h"
+#include "radiation.h"
+      integer i,j,ilower,iupper
+      REAL    qa,qb,v1zc,t12(in,jn),t21(in,jn)
+      equivalence (t12,wa),(t21,wb)
+c\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\////////////////////////////////
+c=======================================================================
+c
+      do 20 j=js,je
+        do 10 i=ii(j),io(j)
+          v1zc    = 0.5*(v1(i,j) + v1(i+1,j))
+          qa = g2a(i+1)*g31a(i+1)*v1(i+1,j)
+          qb = g2a(i  )*g31a(i  )*v1(i  ,j)
+c
+          dv11(i,j) = (v1(i+1,j) - v1(i,j))*dx1ai(i)
+          dv22(i,j) =  v1zc/g2b(i)*dg2bd1(i)
+     &      + (v2(i,j+1)-v2(i,j))/(g2b(i)*dx2a(j))
+          dv33(i,j) =  v1zc/g31b(i)*dg31bd1(i)
+     &      + 0.5*(v2(i,j) + v2(i,j+1))/(g2b(i)*g32b(j))*dg32bd2(j)
+          divv(i,j) = (qa - qb)/dvl1a(i)
+     &     + (g32a(j+1)*v2(i,j+1)-g32a(j)*v2(i,j))/(g2b(i)*dvl2a(j))
+10      continue
+20    continue
+c
+c  Note for the off-diagonal components of GRAD(v) special formula are
+c  needed in RT geometry to prevent divide by zero at i=ii(j).
+c
+      do 40 j=js,je+1
+        ilower = ii  (j)
+        iupper = iop1(j)
+#ifdef RT
+        if (g2a(ii  (j)) .eq. 0.0) ilower = iip1(j)
+#endif
+        do 30 i=ilower,iupper
+          t12(i,j) = (v2(i,j) - v2(i-1,j  ))*dx1bi(i)
+          t21(i,j) = (v1(i,j) - v1(i  ,j-1))/(g2a(i)*dx2b(j))
+     &      -0.5*(v2(i,j) + v2(i-1,j))/g2a(i)*dg2ad1(i)
+30      continue
+#ifdef RT
+        if (ilower .ne. ii(j)) then
+          t12(ii(j),j) = (v2(ii(j),j) - v2(iim1(j),j))*dx1bi(ii(j))
+          t21(ii(j),j) = 0.0
+        endif
+#endif
+40    continue
+c
+c  average dv12 and dv21 to zone centers
+c
+      do 60 j=js,je
+	do 50 i=ii(j),io(j)
+	  dv12(i,j) = 0.25*(t12(i,j)+t12(i+1,j)+t12(i,j+1)+t12(i+1,j+1))
+	  dv21(i,j) = 0.25*(t21(i,j)+t21(i+1,j)+t21(i,j+1)+t21(i+1,j+1))
+50      continue
+60    continue
+#endif
+      return
+      end

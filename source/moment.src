@@ -1,0 +1,230 @@
+#include "zeus2d.def"
+c=======================================================================
+c//////////////////////////  SUBROUTINE MOMENT  \\\\\\\\\\\\\\\\\\\\\\\\
+c
+      subroutine moment
+#ifdef RAD
+c
+c  PURPOSE:  Controls the update of all the dynamical variables (e,er,
+c  fr1,fr2) due to source terms in the moment equations. This requires
+c  solving the dynamical (moment) equations including (only) the
+c  source/sink terms. We use Newton-Raphson iteration of the coupled,
+c  implicit equations to update e and er, and then use the algebraic
+c  automatic flux limiting (AFL) relation to update fr1 and fr2.
+c
+c  Note that the full solution of the radiation dynamical equations also
+c  requires including the transport terms.  This is done in the routines
+c  TRANX* for er and MOMX* for fr1 and fr2, which are executed in the
+c  transport step.  Since fr1 and fr2 are vectors, there are additional
+c  "source" terms due to derivatives of the unit vectors added in the
+c  AFL routine (FLUX).
+c
+c  EXTERNALS:
+c
+c  LOCALS:
+c-----------------------------------------------------------------------
+      implicit NONE
+#include "param.h"
+#include "grid.h"
+#include "field.h"
+#include "root.h"
+#include "scratch.h"
+#include "radiation.h"
+      logical boost
+      integer iter,miticcg,i,j
+      REAL one
+      REAL dthydro,trad,eiccg,epsemx,epsermx,q1
+     &   ,demx,dermx,enorm,ernorm
+      REAL t(in),dtde(in),dbbdt(in),dkapdt(in)
+      REAL detot(in,jn),dertot(in,jn)
+      REAL derel(in),derrel(in),derelj(jn),derrelj(jn)
+      equivalence (derel,wi8),(derrel,wi9),(derelj,wj2),(derrelj,wj3)
+      equivalence   (dbbdt ,wi0),(dkapdt,wi1)
+c
+      external scopy,temp,eos,planck,absorp,riccg,bvalern
+c\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\///////////////////////////////////
+c=======================================================================
+c  implicit solution of the coupled moment equations
+c  Initial guesses for radiation and material energy densities are 
+c  current values of these variables.
+c    line 1 = target if timestep reduced
+c    line 2 = target if timestep not yet finished, timestep not reduced
+c
+      one = 1.0
+      nred = 0
+      dthydro = dt
+1     continue
+      trad = 0.0
+2     continue
+      boost = .false.
+      do 20 j=js,je
+        do 10 i=is,ie
+          de tot(i,j) = 0.0
+          dertot(i,j) = 0.0
+10      continue
+20    continue
+      do 22 j=js-2,je+2
+        do 21 i=is-2,ie+2
+          ern(i,j) = er(i,j) + der(i,j)
+          e n(i,j) = e (i,j) + de (i,j)
+21      continue
+22    continue
+c      call scopy(in*jn,er,1,ern,1)
+c      call scopy(in*jn,e ,1,en ,1)
+c
+c  Compute gas pressure and absorption coefficients at old and new
+c   material energy density (which are initially identical), and
+c   derivatives (evaluated at new material energy density)
+c
+      do 40 j=js,je
+        call temp  (e(1,j),d(1,j),gamma,is,ie,t  (1  ),dtde  (1  ))
+        call eos   (e(1,j),d(1,j),gamma,is,ie,p  (1,j),dpde  (1,j))
+        call planck(t(1  )             ,is,ie,bb (1,j),dbbdt (1  ))
+        call absorp(t(1  ),d(1,j),      is,ie,kap(1,j),dkapdt(1  ))
+c
+        call scopy(in,p  (1,j),1,pn  (1,j),1)
+        call scopy(in,bb (1,j),1,bbn (1,j),1)
+        call scopy(in,kap(1,j),1,kapn(1,j),1)
+        do 30 i=is,ie
+          dbb de(i,j) = dbb dt(i)*dtde(i)
+          dkapde(i,j) = dkapdt(i)*dtde(i)
+30      continue
+40    continue
+c
+c---------------  Start Newton-Raphson iteration loop  -----------------
+c
+      do 1000 iter=1,nmeiter
+c	eiccg   = epsrad
+	eiccg   = epsrad*10.0**max(0,3-iter)
+	miticcg = maxrad
+	call riccg(eiccg,ks0rad,miticcg)
+        if (miticcg .ge. maxrad) then
+          write(2,"('**********  ICCGAF did not converge with dt=',
+     &     1pe12.5,'  **********',/1x,'(epsrad,eiccg) =',2e14.5)")
+     &     dt,epsrad,eiccg
+          goto 1001
+        else
+          if (iorad .eq. 1) write(2,"(1x,'nhy=',i5,' MOMENT: ICCG '
+     &    'converged in',i3,' iterations, eps=',1pe12.5)")
+     &    nhy,miticcg,eiccg
+        endif
+c  restrict maximum change in a variable by q1
+c  sum changes in e and er into running totals
+        epse mx = 0.0
+	epsermx = 0.0
+        e norm = 0.0
+        ernorm = 0.0
+        do 109 j=js,je
+          do 108 i=is,ie
+            e norm = e norm + abs(e n(i,j))
+            ernorm = ernorm + abs(ern(i,j))
+108       continue
+109     continue
+        do 120 j=js,je
+          do 110 i=is,ie
+            de tot(i,j) = de tot(i,j) + de (i,j)
+            dertot(i,j) = dertot(i,j) + der(i,j)
+            epse mx = max(abs(de (i,j)/e norm),epse mx)
+            epsermx = max(abs(der(i,j)/ernorm),epsermx)
+110       continue
+120     continue
+        q1 = min(one,min(demax/epsemx,dermax/epsermx))
+c  apply iterates to update variables
+        do 140 j=js,je
+          do 130 i=is,ie
+            e n(i,j) = e n(i,j) + q1*de (i,j)
+            ern(i,j) = ern(i,j) + q1*der(i,j)
+130       continue
+140     continue
+        call bvalern
+c
+c  Apply boost iteration, exit loop if iterative solution has converged
+c
+        if (epsemx .le. epsme .and. epsermx .lt. epsme) then
+          if (boost .eqv. .true.) goto 1002
+          boost = .true.
+        endif
+c
+c  Else, prepare for another iteration
+c
+        do 160 j=js,je
+          call temp (en(1,j),d(1,j),gamma,is,ie,t   (1  ),dtde  (1  ))
+          call eos  (en(1,j),d(1,j),gamma,is,ie,pn  (1,j),dpde  (1,j))
+          call planck(t(1  )             ,is,ie,bbn (1,j),dbbdt (1  ))
+          call absorp(t(1  ),d(1,j),      is,ie,kapn(1,j),dkapdt(1  ))
+          do 150 i=is,ie
+            dbb de(i,j) = dbb dt(i)*dtde(i)
+            dkapde(i,j) = dkapdt(i)*dtde(i)
+150       continue
+160     continue
+1000  continue
+c------------------  End Newton-Raphson iteration loop  ----------------
+c
+c  If this point is reached, then Newton-Raphson did not converge within
+c  the maximum allowed number of iterations.  Try reducing timestep.
+c    1001 = target if total correction exceeds limit or ICCG failed
+c           to converge => reduce timestep 
+c
+      write(2,"('**********  NR failed to converge with dt=',1pe12.5,
+     &  '  **********',/1x,'(iter,de,der) =',i3,2e14.5)") dt,iter
+     &  ,epsemx,epsermx
+1001  continue
+      nred = nred+1
+      if (nred .gt. 6) then
+        write(2,"('**********  TIMESTEP REDUCTION FAILED:  ABORTING  ',
+     &   '**********')")
+        ifsen = 1
+        return
+      endif
+      dt = dt/4.0
+      goto 1
+c
+c  NR apparently converged.  Check that total changes in variables are
+c  less than max allowed
+c
+1002  continue
+      if (iorad .eq. 1 ) write(2,"(1x,'NR iteration',i3,' finished:',
+     & ' (q1,de,der)=',1pe12.5,2e14.5)") iter,q1,epsemx,epsermx
+      de mx = 0.0
+      dermx = 0.0
+      e norm = 0.0
+      ernorm = 0.0
+      do 1009 j=js,je
+         do 1008 i=is,ie
+           e norm = e norm + abs(e (i,j))
+           ernorm = ernorm + abs(er(i,j))
+1008    continue
+1009  continue
+      do 1020 j=js,je
+        do 1010 i=is,ie
+          de mx = max(abs(de tot(i,j)/e norm),de mx)
+          dermx = max(abs(dertot(i,j)/ernorm),dermx)
+1010    continue
+1020  continue
+c  total changes too large, reduce timestep
+      if (demx .gt. dtotmax .or. dermx .gt. dtotmax) then
+        write(2,"('**********  Total changes too large with dt=',1pe12.5,
+     &       '  **********',/1x,'(demx,dermx) =',2e14.5)") dt,demx,dermx
+        goto 1001
+      endif
+c
+c  final energy density update
+c
+      call scopy(in*jn,ern,1,er,1)
+      call scopy(in*jn,e n,1,e ,1)
+      call bvaler
+      call bvale
+c
+c  Check that entire timestep is finished
+c
+      trad = trad + dt
+      if (trad .lt. dthydro) then
+        dt = min(dt,dthydro-trad)
+        goto 2
+      endif
+      dt = dthydro
+      write(2,"('nhy=',i6,' NR converged with',i2,' dt reductions ',
+     & '(de,der)=',1pe12.5,1e13.5)") nhy,nred,demx,dermx
+#endif
+      return
+      end

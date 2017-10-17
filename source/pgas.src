@@ -1,0 +1,47 @@
+#include "zeus2d.def"
+c=======================================================================
+c////////////////////////  SUBROUTINE PGAS  \\\\\\\\\\\\\\\\\\\\\\\\\\\\
+c
+      subroutine pgas
+c
+c  PURPOSE: Calculates the gas pressure at each zone centered point on
+c  the grid.  If gamma < 0, then the pressure is set to 0 (allows for
+c  pressure free evolution calculations).  The pressure is computed in
+c  ghost zones for diagnostics, though it is never needed there.
+c  If gamma=1, an isothermal EOS is used, ie p=ciso**2*d
+c
+c  EXTERNALS: [none]
+c
+c  LOCALS:
+c-----------------------------------------------------------------------
+      implicit NONE
+#include "param.h"
+#include "grid.h"
+#include "field.h"
+#include "root.h"
+      integer  i,j
+c\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\///////////////////////////////////
+c=======================================================================
+c
+      if ((gamma-1.0) .gt. 0.0) then
+      do 20 j=js-2,je+2
+        do 10 i=iim2(j),iop2(j)
+          p(i,j) = (gamma - 1.0)*e(i,j)
+10      continue
+20    continue
+      elseif ((gamma-1.0) .eq. 0.0) then
+      do 40 j=js-2,je+2
+        do 30 i=iim2(j),iop2(j)
+          p(i,j) = ciso**2*d(i,j)
+30      continue
+40    continue
+      else
+      do 60 j=js-2,je+2
+        do 50 i=iim2(j),iop2(j)
+          p(i,j) = 0.0
+50      continue
+60    continue
+      endif
+c
+      return
+      end

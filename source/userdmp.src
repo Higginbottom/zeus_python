@@ -1,0 +1,65 @@
+#include "zeus2d.def"
+c=======================================================================
+c/////////////////////////  EXAMPLE USERDUMP  \\\\\\\\\\\\\\\\\\\\\\\\\\
+c
+      subroutine userdmp
+c
+c  written by:   Robert Fiedler
+c  release date: May 10, 1995
+c
+c  PURPOSE:  Example USERDUMP routine to generate ASCII output
+c            files during a ZEUS-2D run.
+c
+c  USAGE:  To use this routine, include "-u userdmp" on the
+c          Make_zeus2d command line.
+c
+c  DESCRIPTION:  This example USERDUMP routine prints out the
+c                coordinates and the density, energy density,
+c                pressure and velocity components for a 2-D
+c                hydrodynamics simulation.  It must be modified
+c                to list v3, magnetic field components, 
+c                gravitational potential, radiation energy density, 
+c                etc.  Fig. 3 in the documentation shows how
+c                the field variables are centered.
+c
+c-----------------------------------------------------------------------
+      implicit NONE
+#include "param.h"
+#include "field.h"
+#include "grid.h"
+#include "root.h"
+c      REAL     dummy
+      integer  i, j
+c\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\///////////////////////////////////
+c=======================================================================
+c
+c Write out the coordinates and the density for each zone in the
+c computational domain to unit 12 (usrfile).
+c
+      print *,"BLAH",usrfile
+      open(12,file=usrfile)
+      write(12,"('ZEUS2D field variables at time = ',e15.9)") time
+      write(12,"(a)")
+      write(12,"('         x1b             x2b         density',
+     1 '       ener dens        pressure')")
+      write(12,12) ( ( x1b(i), x2b(j), d (i,j), e (i,j), p(i,j),
+     1                 i=is,ie ), j=js,je )
+12    format(5e16.9)
+      write(12,"(a)")
+      write(12,"('         x1a             x2b              v1')")
+      write(12,22) ( ( x1a(i), x2b(j), v1(i,j), 
+     1                 i=is,ie+1 ), j=js,je )
+22    format(3e16.9)
+      write(12,"(a)")
+      write(12,"('         x1b             x2a              v2')")
+      write(12,32) ( ( x1b(i), x2a(j), v2(i,j),
+     1                 i=is,ie ), j=js,je+1 )
+32    format(3e16.9)
+      close(12)
+c
+c Make a note of this dump in the log file.
+c
+c      write(2,"(/1x,'user dump written at time=',1pe12.5,' cycle='
+c     & ,i6)") time,nhy
+c
+      end

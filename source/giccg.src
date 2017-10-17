@@ -1,0 +1,158 @@
+#include "zeus2d.def"
+c=======================================================================
+c////////////////////////  SUBROUTINE GICCG  \\\\\\\\\\\\\\\\\\\\\\\\\\\
+c
+      subroutine giccg(eps,ks0,maxit)
+#ifdef GRAV
+c
+c  PURPOSE: Calculates the self gravity of the fluid over the whole grid
+c  by solving the Poisson eqn in 2-D:
+c                    (del)**2[phi] = 4*pi*G*d
+c  for the gravitational potential phi(i,j) in a covariant formalism
+c  (note, however, that self gravity can not be treated in cartesian
+c  (xy) geometry).  A direct solution of the full finite difference
+c  matrix equation is used (where the finite difference eqn is written
+c  in integral form to reduce discretization errors in rt geometry),
+c  utilizing the sparse matrix solver ICCGAF. The routine PHIBV is used
+c  to calculate the boundary potentials, except for symmetric boundaries
+c  (where d(phi)/dx=0), in which case the boundary condition is 
+c  implemented in the matrix elements. We use the flags igriib,igroib,
+c  igrijb, igrojb to label symmetric boundaries (if the flag = 0,
+c  boundary is symmetric).  CAUTION-- This routine assumes PHIBV has
+c  already been called (directly before entering this routine)
+c
+c  INPUT ARGUMENTS:
+c      eps   = minimum L2 error for ICCGAF
+c      ks0   = max number of cyclic reductions in ICCGAF
+c      maxit = max number of cg iterations     in ICCGAF
+c
+c  OUTPUT ARGUMENTS:
+c      eps   = actual L2 error achieved         in ICCGAF
+c      maxit = actual number of cg iterations used "   "
+c
+c  EXTERNALS: ICCGAF
+c
+c  LOCALS:
+c  av0,av1,bv0   = vector arrays of matrix diagonal bands. See ICCGAF
+c    bv1,bm1       documentation. In our application, bv1=bm1=0
+c  xv            = vector of potential values (solution vector)
+c  yv            = RHS of matrix eqn
+c  work          = work space used by ICCGAF
+c  qa...qe       = dummy variables
+c-----------------------------------------------------------------------
+      implicit NONE
+#include "param.h"
+#include "grid.h"
+#include "field.h"
+#include "bndry.h"
+#include "scratch.h"
+#include "gravity.h"
+      REAL    eps
+      integer maxit,ks0
+      integer nz
+c
+      REAL    fpg,qa,qb,qc,qd,qe
+     &       ,av0(2*in*jn),av1(2*in*jn),bv0(2*in*jn), bv1(2*in*jn)
+     &       ,bm1(2*in*jn),xv (2*in*jn),yv (2*in*jn),work(4*in*jn)
+      integer i,j,m
+      equivalence 
+     &     (av0,wa) , (av1,wc)
+     &   , (bv0,wcg1(1        )) , (bv1 ,wcg1(2 *in*jn+1)) 
+     &   , (bm1,wcg1(4*in*jn+1)) , (xv  ,wcg1(6 *in*jn+1))
+     &   , (yv ,wcg1(8*in*jn+1)) , (work,wcg1(10*in*jn+1))
+c
+      external iccgaf,scopy
+c\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\////////////////////////////////////////
+c=======================================================================
+c  Set up matrix elements
+c
+      fpg = 4.0*pi*g
+      do 20 j=js,je
+        qd = g32a(j+1)*dx2bi(j+1)
+        qe = g32a(j  )*dx2bi(j  )
+        do 10 i=is,ie
+          m  = (j-js)*(ie-is+1) + i - is + 1 
+          qa = g2a(i+1)*g31a(i+1)*dx1bi(i+1)
+          qb = g2a(i  )*g31a(i  )*dx1bi(i  )
+          qc = g2b(i)*g2b(i)
+c
+          av0(m) = dvl1a(i)/qc*(qd+qe) + dvl2a(j)*(qa+qb)
+          bv0(m) = -dvl1a(i)*qd/qc
+          av1(m) = -dvl2a(j)*qa
+          bv1(m) = 0.0
+          bm1(m) = 0.0
+c
+          xv (m) = phi(i,j)
+          yv (m) = dvl1a(i)*dvl2a(j)*fpg*d(i,j)
+c
+10      continue
+20    continue
+c
+c  Add boundary conditions to matrix elements or yv, as appropriate.
+c  Order is iib, oib, ijb, ojb. 
+c
+      qa = g2a(is)*g31a(is)*dx1bi(is)
+      do 30 j=js,je
+        m = (j-js)*(ie-is+1) + 1
+        if (igriib .eq. 0) av0(m) = av0(m) - qa*dvl2a(j)
+        if (igriib .eq. 1) yv (m) = yv (m) + qa*dvl2a(j)*phi(is-1,j)
+30    continue
+c
+      qa = g2a(ie+1)*g31a(ie+1)*dx1bi(ie+1)
+      do 40 j=js,je
+        m = (j-js+1)*(ie-is+1)
+        av1(m) = 0.0
+        if (igroib .eq. 0) av0(m) = av0(m) - qa*dvl2a(j)
+        if (igroib .eq. 1) yv (m) = yv (m) + qa*dvl2a(j)*phi(ie+1,j)
+40    continue
+c
+cdir$ ivdep
+      qa = g32a(js)*dx2bi(js)
+      do 50 i=is,ie
+        m = i - is + 1
+        qb = dvl1a(i)/g2b(i)**2
+        if (igrijb .eq. 0) av0(m) = av0(m) - qa*qb
+        if (igrijb .eq. 1) yv (m) = yv (m) + qa*qb*phi(i,js-1)
+50    continue
+c
+cdir$ ivdep
+      qa = g32a(je+1)*dx2bi(je+1)
+      do 60 i=is,ie
+        m = (je-js)*(ie-is+1) + i - is + 1
+        bv0(m) = 0.0
+        qb = dvl1a(i)/g2b(i)**2
+        if (igrojb .eq. 0) av0(m) = av0(m) - qa*qb
+        if (igrojb .eq. 1) yv (m) = yv (m) + qa*qb*phi(i,je+1)
+60    continue
+c
+c  Matrix elements are finished, solve system.
+c
+cRAF
+cRAF Eliminate the use of pointers by aliasing some arrays through
+cRAF the subroutine call -- ugly, but portable!
+cRAF
+cRAF      call iccgaf(nx1z,nx2z,eps,ks0,maxit,av0,av1,bv0,bv1,bm1
+cRAF     &            ,xv,yv,work)
+      nz = nx1z * nx2z
+      call iccgaf(nx1z,nx2z,eps,ks0,maxit,xv(nz+1),yv(nz+1),av0,
+     .            work,work,work,work(nz+1),work(nz+1),
+     .            work(2*nz+1),work(3*nz+1),
+     .                    av0,av1,bv0,bv1,bm1,xv,yv,work)
+c
+c  deconvolve xv values to get phi(i,j)
+c
+      do 80 i=is,ie
+        do 70 j=js,je
+          phi(i,j) = xv((j-js)*(ie-is+1) + i - is + 1)
+70      continue
+80    continue
+c
+c  Store phi values along symmetry boundaries (iib,oib,ijb,ojb)
+c
+      if (igriib.eq.0) call scopy(nx2z,phi(is,js),in,phi(is-1,js  ),in)
+      if (igroib.eq.0) call scopy(nx2z,phi(ie,js),in,phi(ie+1,js  ),in)
+      if (igrijb.eq.0) call scopy(nx1z,phi(is,js), 1,phi(is  ,js-1), 1)
+      if (igrojb.eq.0) call scopy(nx1z,phi(is,je), 1,phi(is  ,je+1), 1)
+#endif
+      return
+      end

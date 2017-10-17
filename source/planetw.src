@@ -1,0 +1,114 @@
+#include "zeus2d.def"
+c=====================================================================
+c///////////////////////  SUBROUTINE BONDIACC \\\\\\\\\\\\\\\\\\\\\\\\\\\
+c
+      subroutine planetw      
+c
+c  INPUTS A SPHERICAL planetatmospher
+c
+c     written by: Daniel Proga
+c     date:       Jan 2008
+c     modified1:  
+c
+c  PURPOSE: test the code
+c           
+c
+c  INPUT PARAMETERS:
+c   d0       = the mass density at the base of the atmosphere
+c   temp0    = the gas temperature at the base of the atmosphere
+c
+c  LOCALS:
+
+c   e0       = the energy density at the base of the atmosphere
+c----------------------------------------------------------------------
+      implicit NONE
+#include "cons.h"
+#include "param.h"
+#include "grid.h"
+#include "field.h"
+#include "root.h"
+#include "scratch.h"
+#include "gravity.h"
+#include "bndry.h"
+#include "planetw.h"
+
+      integer i,j,iprob
+      real*8 e0,csound
+
+      external bvalv1,bvalv2,bvalv3,bvald,bvale	
+c
+
+c\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\///////////////////////////////////////
+c=======================================================================
+c
+      namelist /pgen/ d0,v10,v20,hep,t0,tramp,eratio
+c
+c  read parameters from input deck
+c
+      read (1,pgen)
+      write(2,pgen)
+c
+c  compute sound speed from Hydrodynamic Escape Parameter (HEP)
+c  start with HEP=5, and let planetwbc increase in time to final val.
+c   assumes Vesc^2 = 2 (requires G=M=R=1)
+c
+c      ciso = 1.0/sqrt(5.0)
+      ciso = 1.0/sqrt(hep)
+      csound = 1.0/sqrt(hep)
+c
+c  compute internal enegy
+c
+      if ((gamma-1.0) .gt. 0.0) then
+       e0  = csound**2*d0/(gamma*(gamma-1.0))
+      endif
+c
+c  setup d, e and vel. over whole grid
+c
+
+c iprob =1 spherical wind problem 
+
+
+      iprob=1
+      if (iprob.eq.1) then   
+
+c
+c  Initialize density and velocity variables, using HE
+c
+
+        do  j=js,je
+         do i=is,ie
+c          d(i,j)=max(1.0e-10,exp((-1.0/csound**2)*(1.0 - 1.0/x1b(i))))
+c          d(i,j)=d0/x1b(i)**2
+          d(i,j) = tiny
+	  v1(i,j)=v10
+	  v2(i,j)=0.0
+         enddo
+        enddo
+
+      if (gamma .ne. 1.0) then
+        do  j=js,je
+        do  i=is,ie
+           e(i,j)=csound**2*d(i,j)/(gamma*(gamma-1.0))/x1b(i)**2
+         enddo
+        enddo
+        endif
+
+        do j=js,je
+         diim1(j) = d0
+         diim2(j) = d0
+
+         eiim1(j) = e0
+         eiim2(j) = e0
+       enddo
+
+      endif
+
+
+      call bvale
+      call bvald
+      call bvalv1
+      call bvalv2
+
+      return
+      end
+

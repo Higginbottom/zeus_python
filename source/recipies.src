@@ -1,0 +1,178 @@
+
+
+
+	SUBROUTINE polin2(x1a,x2a,ya,m,n,x1,x2,y,dy)
+		
+		
+	INTEGER m,n,NMAX,MMAX
+	REAL dy,x1,x2,y,x1a(m),x2a(n),ya(m,n)
+	PARAMETER (NMAX=501,MMAX=501) 
+	INTEGER j,k
+	REAL ymtmp(MMAX),yntmp(NMAX) 
+	do 12 j=1,m
+		do 11 k=1,n 
+			yntmp(k)=ya(j,k)
+ 11		continue
+		call polint(x2a,yntmp,n,x2,ymtmp(j),dy) 
+ 12	continue
+	call polint(x1a,ymtmp,m,x1,y,dy) 
+	return
+	END
+
+
+
+	SUBROUTINE polint(xa,ya,n,x,y,dy)
+		
+	INTEGER n,NMAX
+	REAL dy,x,y,xa(n),ya(n)
+	PARAMETER (NMAX=501) 
+	INTEGER i,m,ns
+	REAL den,dif,dift,ho,hp,w,c(NMAX),d(NMAX) 
+	ns=1
+	dif=abs(x-xa(1))
+	do 11 i=1,n 
+		dift=abs(x-xa(i))
+		if (dift.lt.dif) then
+			ns=i
+			dif=dift 
+		endif
+		c(i)=ya(i) 
+		d(i)=ya(i) 
+ 11		continue
+	y=ya(ns) 
+	ns=ns-1
+	do 13 m=1,n-1
+		do 12 i=1,n-m 
+			ho=xa(i)-x
+			hp=xa(i+m)-x
+			w=c(i+1)-d(i)
+			den=ho-hp
+			if(den.eq.0.) then
+				print *,"Failure in Polint"
+				exit
+			endif
+			den=w/den
+			d(i)=hp*den
+			c(i)=ho*den 
+ 12		continue
+		if (2*ns.lt.n-m)then 
+			dy=c(ns+1)
+		else 
+			dy=d(ns)
+			ns=ns-1
+   		endif
+		y=y+dy 
+ 13 	continue
+	return 
+	END
+	
+	
+c     this file contains the quasi-vanilla and slightly modified
+c     versions of FORTRAN Numerical Recipe routines
+c     DOUBLE PRECISION FUNCTION ZBRENT(FUNC,X1,X2,TOL)
+c     MODIFICATIONS from the vanilla Numerical Recipes: all of the
+c     following routines have been trivially modified in two ways from
+c     the original vanilla; (1) the declarations are now IMPLICIT NONE
+c     or IMPLICIT DOUBLE PRECISION; (2) communication of errors which
+c     may occur in the form of WRITE statements with hard STOPs; some of
+c     the routines have been further modified (see comments in each
+c     routine for details)
+
+c::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+
+      REAL*8 FUNCTION ZBRENT(FUNC,X1,X2,TOL,code,i,j)
+
+c     return the root of the function FUNC using Brents method where
+c     the root of the function is assumed lie between X1 and X2; the
+c     root is refined until its accuracy is TOL and is returned as
+c     ZBRENT
+c..............................................................................
+
+      IMPLICIT DOUBLE PRECISION (A-H,O-Z)
+	  integer code
+      PARAMETER (ITMAX=100,EPS=3.E-14)
+      A=X1
+      B=X2
+      FA=FUNC(A)
+      FB=FUNC(B)
+c     error: Root not bracketed 
+      IF(FB*FA.GT.0.) THEN
+c       WRITE(6,*) 'ERROR(zbrent): root of FUNC not bracketed.'
+c       WRITE(6,*) 'lower bracket A = ',A,' FUNC(A) = ',FUNC(A)
+c       WRITE(6,*) 'upper bracket B = ',B,' FUNC(B) = ',FUNC(B)
+c       WRITE(6,*) 'this can be remedied by changing A and/or B'
+	   code=0
+c       call exit(5)
+      END IF
+      FC=FB
+      DO 11 ITER=1,ITMAX
+        IF(FB*FC.GT.0.) THEN
+          C=A
+          FC=FA
+          D=B-A
+          E=D
+        ENDIF
+        IF(ABS(FC).LT.ABS(FB)) THEN
+          A=B
+          B=C
+          C=A
+          FA=FB
+          FB=FC
+          FC=FA
+        ENDIF
+        TOL1=2.*EPS*ABS(B)+0.5*TOL
+        XM=.5*(C-B)
+        IF(ABS(XM).LE.TOL1 .OR. FB.EQ.0.)THEN
+          ZBRENT=B
+c	print *,"zbrent took ",ITER," iterations"
+		  code=1
+          RETURN
+        ENDIF
+        IF(ABS(E).GE.TOL1 .AND. ABS(FA).GT.ABS(FB)) THEN
+          S=FB/FA
+          IF(A.EQ.C) THEN
+            P=2.*XM*S
+            Q=1.-S
+          ELSE
+            Q=FA/FC
+            R=FB/FC
+            P=S*(2.*XM*Q*(Q-R)-(B-A)*(R-1.))
+            Q=(Q-1.)*(R-1.)*(S-1.)
+          ENDIF
+          IF(P.GT.0.) Q=-Q
+          P=ABS(P)
+          IF(2.*P .LT. MIN(3.*XM*Q-ABS(TOL1*Q),ABS(E*Q))) THEN
+            E=D
+            D=P/Q
+          ELSE
+            D=XM
+            E=D
+          ENDIF
+        ELSE
+          D=XM
+          E=D
+        ENDIF
+        A=B
+        FA=FB
+        IF(ABS(D) .GT. TOL1) THEN
+          B=B+D
+        ELSE
+          B=B+SIGN(TOL1,XM)
+        ENDIF
+        FB=FUNC(B)
+11    CONTINUE
+c     error message for too many iterations
+c      WRITE(6,*) 'ERROR(zbrent): number of iterations required to'
+cc     WRITE(6,*) 'converge on the root of FUNC exceeded maximum'
+c     WRITE(6,*) 'allowed.  This can be remedied by increasing'
+c      WRITE(6,*) 'parameter ITMAX in the file or by relaxing'
+c      WRITE(6,*) 'the convrgence tolerance TOL'
+c      WRITE(6,*) X1,X2,i,j
+      
+c      WRITE(6,*) '*** terminating program  ***'
+      code=0
+c      call exit(5)
+      ZBRENT=B
+      RETURN
+      END
+  

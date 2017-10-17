@@ -1,0 +1,68 @@
+#include "zeus2d.def"
+c=======================================================================
+c//////////////////////////  SUBROUTINE MOVIE  \\\\\\\\\\\\\\\\\\\\\\\\\
+c
+      subroutine movie(filename)
+c
+c  DUMPS VARIABLES FOR ANIMATION
+c
+c     written by: Jim Stone
+c     date:       June,1993
+c     modified1: 
+c
+c  PURPOSE:  Dumps raster images for animation by Imagetool, Spyglass
+c  VIEW, etc.  Currently dumps only density; add new variables as
+c  needed.  Min/max of density during simulation must be set by hand
+c  in this routine.  This routine is intended as a USER dump.
+c
+c  LOCALS:
+c-----------------------------------------------------------------------
+      implicit NONE
+#include "param.h"
+#include "grid.h"
+#include "field.h"
+#include "root.h"
+#include "scratch.h"
+      character*16  filename
+c
+      integer  i,j,irecl
+      real dmin,dmax,dden
+      character*1 fech(in,jn)
+      integer ico(in,jn)
+c\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\///////////////////////////////
+c=======================================================================
+c
+      irecl = nx1z*nx2z
+c      dmax = 1.0e-5
+c      dmin = 1.0e-20
+      dmax = 1.0e0
+      dmin = 1.0e-6
+      dmin = alog(dmin)
+      dmax = alog(dmax)
+      dden = (dmax-dmin)/float(256)
+      do 10 j=js,je
+      do 10 i=is,ie
+cx	denv=d(i,j)
+cx	if (denv.lt.1.e-16) denv=1.e-20
+cx	if (denv.gt.1.e-10) denv=1.e-10
+cx        ico(i,j)=min(max(ifix(dim(alog(denv)-dmin,0.0)/dden),1),253)
+        ico(i,j)=min(max(ifix(dim(alog(sngl(d(i,j)))-
+     1 dmin,0.0)/dden),1),253)
+c        ico(i,j)=min0(max0(idint(dim(alog(d(i,j))-dmin,0.0d0)
+c     1           /dden),1),253)
+c       ico(i,j)=min(max(idint(dim(dlog(d(i,j))-dmin,0.0)/dden),1),253)
+cx	print *,   ico(i,j), char(ico(i,j)),i,j
+        fech(i,j) =  char(ico(i,j))
+
+10    continue
+
+c
+      open(unit=44,file=filename,status='unknown',access='direct',
+     &  form='unformatted',recl=irecl)
+      write(44,rec=1) ((char(ico(i,j)),i=is,ie),j=js,je)
+c      write(44,rec=1) (('a',i=is,ie),j=js,je)
+      close(unit=44)
+c      stop 
+c
+      return
+      end

@@ -1,0 +1,130 @@
+#include "zeus2d.def"
+c=======================================================================
+c///////////////////////  SUBROUTINE SHKSET  \\\\\\\\\\\\\\\\\\\\\\\\\\
+c
+       subroutine shkset
+c
+c  PURPOSE:  Sets up a Sod shock tube problem in the 1- or 2-direction
+c  for testing of hydro-codes (depending on the value of idirect that is
+c  input).  Also can be used to set up MHD Riemann problems.
+c
+c  LOCALS:
+c   idirect = direction flag: 1 for 1-direction; 2 for 2-direction
+c   n0  = Number of zones to be initialized. The namelist is read from
+c         unit=1 until a total of ie-is+1 [or je-js+1] zones are
+c         initialized.
+c   d0  = input density
+c   e0  = input specific internal energy (=e/d)
+c   v10 = input velocity in 1 direction
+c   v20 = input velocity in 2 direction
+c   v30 = input velocity in 3 direction
+c   b10 = input magnetic field in 1 direction
+c   b20 = input magnetic field in 2 direction
+c   b30 = input magnetic field in 3 direction
+c-----------------------------------------------------------------------
+      implicit NONE
+#include "param.h"
+#include "grid.h"
+#include "field.h"
+#include "root.h"
+      integer  imin,imax,jmin,jmax,idirect,n0,i,j
+      REAL     d0,e0,v10,v20,v30,b10,b20,b30
+      namelist /pgen/ idirect,n0,d0,e0,v10,v20,v30,b10,b20,b30
+c\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\/////////////////////////////////
+c=======================================================================
+c
+      imax = is - 1
+      jmax = js - 1
+      idirect = 1
+      n0  = nx1z
+      d0  = tiny
+      e0  = tiny
+      v10 = tiny
+      v20 = tiny
+      v30 = tiny
+      b10 = tiny
+      b20 = tiny
+      b30 = tiny
+c
+10    continue
+      read (1,pgen)
+      write(2,pgen)
+c
+c  shock tube in 1-direction
+c
+      if (idirect .eq. 1) then
+        imin = imax + 1
+        imax = imax + n0
+        do 110 j=js,je
+          do 100 i=imin,imax
+            d (i,j) = d0
+            e (i,j) = d0*e0
+            v1(i,j) = v10
+            v2(i,j) = v20
+#ifdef ROTATE
+            v3(i,j) = v30
+#endif
+#ifdef MHD
+            b1(i,j) = b10
+            b2(i,j) = b20
+            b3(i,j) = b30
+#endif
+100       continue
+110     continue
+        if (imax .lt. ie) go to 10
+      endif
+c
+c  shock tube in 2-direction
+c
+      if (idirect .eq. 2) then
+        jmin = jmax + 1
+        jmax = jmax + n0
+        do 210 i=is,ie
+          do 200 j=jmin,jmax
+            d (i,j) = d0
+            e (i,j) = d0*e0
+            v1(i,j) = v10
+            v2(i,j) = v20
+#ifdef ROTATE
+            v3(i,j) = v30
+#endif
+#ifdef MHD
+            b1(i,j) = b10
+            b2(i,j) = b20
+            b3(i,j) = b30
+#endif
+200       continue
+210     continue
+        if (jmax .lt. je) go to 10
+      endif
+c
+c  Set boundary values of B
+c
+#ifdef MHD
+      do 220 j=js,je
+        b1(ii  (j),j) = b1(iip1(j),j)
+        b1(iim1(j),j) = b1(iip1(j),j)
+        b1(iop1(j),j) = b1(io  (j),j)
+        b1(iop2(j),j) = b1(io  (j),j)
+220   continue
+      do 230 i=is+1,ie
+        b1(i,jim1(i)) = b1(i,ji(i))
+        b1(i,jim2(i)) = b1(i,ji(i))
+        b1(i,jop1(i)) = b1(i,jo(i))
+        b1(i,jop2(i)) = b1(i,jo(i))
+230   continue
+      do 240 i=is,ie
+        b2(i,ji  (i)) = b2(i,jip1(i))
+        b2(i,jim1(i)) = b2(i,jip1(i))
+        b2(i,jop1(i)) = b2(i,jo  (i))
+        b2(i,jop2(i)) = b2(i,jo  (i))
+240   continue
+      do 250 j=js+1,je
+        b2(iim1(j),j) = b2(ii(j),j)
+        b2(iim2(j),j) = b2(ii(j),j)
+        b2(iop1(j),j) = b2(io(j),j)
+        b2(iop2(j),j) = b2(io(j),j)
+250   continue
+#endif
+      return
+      end

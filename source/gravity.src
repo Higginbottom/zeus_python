@@ -1,0 +1,104 @@
+#include "zeus2d.def"
+c=======================================================================
+c////////////////////////  SUBROUTINE GRAVITY  \\\\\\\\\\\\\\\\\\\\\\\\\
+c
+      subroutine gravity
+#ifdef GRAV
+c
+c  PURPOSE: Controls the update of the gravitational self-potential
+c  phi(i,j) found by solving the Poisson eqn.  Note that in ZEUS, phi is
+c  defined to be a positive quantity.  This routine works for both
+c  1- and 2-D problems.  In 1-D phi can be computed from a direct
+c  integration of the Poisson eqn.  In 2-D a sparse matrix solver must
+c  be used.  The only sparse matrix solvers implemented in this version
+c  is ICCGAF - incomplete Cholesky decomposition/conjugate gradient.
+c  Before a lengthy (and expensive) 2-D solution is begun, however, this
+c  routine first checks the size of the relative error
+c            errphi = [DEL**2(phi) -4*pi*G*rho]/4*pi*G*rho
+c  and if it is less than graverr, the potential is not updated.
+c
+c  EXTERNALS: PHIBV, GICCG
+c
+c  LOCALS:
+c-----------------------------------------------------------------------
+      implicit NONE
+#include "param.h"
+#include "grid.h"
+#include "field.h"
+#include "root.h"
+#include "scratch.h"
+#include "gravity.h"
+      integer  i,j,imax,imx,jmx,miticcg
+      REAL     fpg,ephimx,qa,qb,qc,qd,qe,prdct,eiccg
+c
+      REAL  mass(in),acc(in),errphi(in)
+      equivalence  (mass,wi0) , (acc,wi1) , (errphi,wi2)
+c
+      integer isamax
+      external isamax,phibv,giccg
+c=======================================================================
+c\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\///////////////////////////////////
+c--------------------------  1-D PROBLEM  ------------------------------
+c
+      if (nx2z .eq. 1) then
+        fpg = 4.0*pi*g
+        mass(is   ) = 0.0
+        phi (is,js) = 0.0
+        do 10 i=is+1,ie
+          mass(i) = mass(i-1) + d(i-1,js)*(x1a(i)**3-x1a(i-1)**3)/3.0
+          acc (i) = fpg*mass(i)/x1a(i)**2
+          phi(i,js) = phi(i-1,js) - acc(i)*dx1b(i)
+10      continue
+        return
+      endif
+c
+      if (nx1z .eq. 1) then
+        return
+      endif
+c
+c----------------------------  2-D PROBLEM  ----------------------------
+c  First check if calculation of phi is needed this cycle. 
+c
+      ephimx = 0.0
+      fpg    = 4.0*pi*g
+      do 110 j=js,je
+        qa = g32a(j+1)*dx2bi(j+1)
+        qb = g32a(j  )*dx2bi(j  )
+        do 100 i=ii(j),io(j)
+          qc = g2b(i)*g2b(i)
+          qd = g2a(i+1)*g31a(i+1)*dx1bi(i+1)
+          qe = g2a(i  )*g31a(i  )*dx1bi(i  )
+          prdct = (dvl1a(i)*dvl2a(j)*fpg*d(i,j)
+     &     + qd*dvl2a(j)*phi(i+1,j) + qa*dvl1a(i)/qc*phi(i,j+1)
+     &     + qe*dvl2a(j)*phi(i-1,j) + qb*dvl1a(i)/qc*phi(i,j-1))/
+     &           ((qa+qb)*dvl1a(i)/qc + (qd+qe)*dvl2a(j))
+          errphi(i) = abs(prdct - phi(i,j))/phi(i,j)
+100     continue
+        imax = isamax(nx1(j),errphi(ii(j)),1) + iim1(j)
+        if (errphi(imax) .gt. ephimx) then
+          ephimx = errphi(imax)
+          imx = imax
+          jmx = j
+        endif
+110   continue
+      if (ephimx .le. graverr) return
+      write(2,"(1x,'nhy=',i5,' GRAVITY: Solution of PE needed this ',
+     & 'cycle, err =',1pe12.5,'at i,j=',2i3)") nhy,ephimx,imx,jmx
+c
+c  Recompute phi at this cycle
+c
+      eiccg   = epsgrv
+      miticcg = maxgrv
+      call phibv
+      call giccg(eiccg,ks0grv,miticcg)
+      if (miticcg .ge. maxgrv) then
+        write(2,"(1x,'WARNING from GRAVITY: ICCGAF did not converge ',
+     &  'within ',i3,' iterations')") miticcg
+        nwarn = nwarn + 1
+      else
+        write(2,"(1x,'nhy=',i5,' GRAVITY: ICCG converged in ',i3,
+     &  ' iterations, eps=',1pe12.5)") nhy,miticcg,eiccg
+      endif
+#endif
+      return
+      end

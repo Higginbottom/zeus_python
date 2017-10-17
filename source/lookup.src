@@ -1,0 +1,166 @@
+#include "zeus2d.def"
+c=====================================================================
+c///////////////////////  SUBROUTINE DISKW \\\\\\\\\\\\\\\\\\\\\\\\\\\
+c
+      subroutine input_lookup      
+c
+c  INPUTS SIMPLE ICs for a thermally expanding disk (a la Font et al. 2004
+c                   see also PSD98
+c
+c     written by: Daniel Proga
+c     date:       June 2009
+c     modified1:  
+c
+c  PURPOSE: test the code
+c           
+c
+c  INPUT PARAMETERS:
+c   d0       = the mass density at the base of the atmosphere
+c   temp0    = the gas temperature at the base of the atmosphere
+c
+c  LOCALS:
+
+c   e0       = the energy density at the base of the atmosphere
+c----------------------------------------------------------------------
+      implicit NONE
+#include "cons.h"
+#include "param.h"
+#include "grid.h"
+#include "field.h"
+#include "root.h"
+#include "scratch.h"
+#include "gravity.h"
+#include "bndry.h"
+#include "diskw.h"
+#include "zeus_python.h"
+
+      integer stat
+
+
+      main_heatcool=.TRUE.
+      split_heatcool=.TRUE.
+      indiv_heatcool=.TRUE.
+	print *,"Reading in the interpolation data"
+	call hc_lookup_input('net_hc_lookup.dat',stat,hc_lu,'lin')
+	
+	if (stat.eq.0) then
+		main_heatcool=.FALSE.
+	endif
+      if (main_heatcool) then
+            print *,"READ main heatcool OK"
+      else
+            print *,'No main interpolation file found - exiting'
+      endif
+
+
+      call hc_lookup_input('comp_c_lookup.dat',stat,comp_c_lu,'log')
+
+      if (stat.eq.0) then
+            indiv_heatcool=.FALSE.
+      endif
+      call hc_lookup_input('comp_h_lookup.dat',stat,comp_h_lu,'log')
+      if (stat.eq.0) then
+            indiv_heatcool=.FALSE.
+      endif
+      call hc_lookup_input('xray_h_lookup.dat',stat,xray_h_lu,'log')
+      if (stat.eq.0) then
+            indiv_heatcool=.FALSE.
+      endif
+      call hc_lookup_input('line_c_lookup.dat',stat,line_c_lu,'log')
+      if (stat.eq.0) then
+            indiv_heatcool=.FALSE.
+      endif
+      call hc_lookup_input('brem_c_lookup.dat',stat,brem_c_lu,'log')
+      if (stat.eq.0) then
+            indiv_heatcool=.FALSE.
+      endif
+
+      call hc_lookup_input('totl_c_lookup.dat',stat,cool_lu,'log')
+      if (stat.eq.0) then
+            split_heatcool=.FALSE.
+      endif
+      call hc_lookup_input('totl_h_lookup.dat',stat,heat_lu,'log')
+      if (stat.eq.0) then
+            split_heatcool=.FALSE.
+      endif
+
+
+      if (indiv_heatcool) then
+            print *,"READ individual heatcool files OK"
+      else
+            print *,'No individual interpolation files found'
+      endif
+
+
+      if (split_heatcool) then
+            print *,"READ h/c split heatcool files OK"
+      else
+            print *,'No h/c split interpolation files found'
+      endif
+
+      print *,cool_lu(10,10),heat_lu(10,10)
+	
+	
+      
+      return
+      end      
+
+
+
+	  subroutine hc_lookup_input(fname,stat,dat,loglin)
+#include "cons.h"
+#include "param.h"
+#include "grid.h"
+#include "field.h"
+#include "zeus_python.h"
+#include "root.h"
+#include "diskw.h"
+#include "control.h"
+      integer i,j,n,unit
+      character*3 loglin
+	LOGICAL THERE 
+   	character*17 fname
+   	character*10 junk
+	REAL, dimension(nt,nxi) :: dat
+	integer number,stat
+		  
+
+	 print *,fname
+       INQUIRE( FILE=fname, EXIST=THERE ) 
+       IF ( THERE ) then
+	       stat=1
+		 open(66,file=fname,status='old')
+	  	 read (66,*,end=20) junk,n_lu_xi
+	       read (66,*,end=20) junk,n_lu_temp
+             read (66,*,end=20)  junk,(lu_xi(i),i=1,n_lu_xi)
+			
+		do 15, n=1,n_lu_xi
+			log_lu_xi(n)=log10(lu_xi(n))
+15		continue				
+
+            do 10, n=1,n_lu_temp
+			READ (66,*,end=20)  lu_temp(n),(dat(n,i),i=1,n_lu_xi)
+		log_lu_temp(n)=log10(lu_temp(n))
+
+10		continue
+20          continue
+
+c    we now take logs of everything else to improve interpolation
+
+	if (loglin.eq.'log')then
+	print *,"Taking logs"
+
+	do 30 i=1,n_lu_xi
+		do 40 j=1,n_lu_temp
+		      dat(j,i)=log10(dat(j,i))
+40 	      continue	
+30 	continue
+	endif
+	close unit=66
+	else
+	      stat=0
+	endif
+      RETURN
+      END
+
+

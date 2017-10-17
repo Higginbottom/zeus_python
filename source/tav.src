@@ -1,0 +1,230 @@
+#include "zeus2d.def"
+c=======================================================================
+c////////////////////////////  SUBROUTINE TAV  \\\\\\\\\\\\\\\\\\\\\\\\\
+c
+      subroutine tav
+c
+c  TENSOR ARTIFICIAL VISCOSITY SOURCE TERMS IN MOMENTUM AND ENERGY EQNS
+c
+c     written by: Jim Stone
+c     date:       September, 1988
+c     modified1: 
+c
+c  PURPOSE: Computes the tensor artificial viscosity source terms in the
+c  momentum and energy equations, ie computes
+c               dv/dt = -DIV(Q)/rho 
+c      and      de/dt = -Q:GRAD(v)
+c  Here GRAD(v) is the SYMMETRIZED tensor of the velocity gradient.
+c  The method used is that based on Tscharnuter and Winkler, Comp. Phys.
+c  Comm. 18:171 (1979).  We have extended/modified their formulation in
+c  the following ways:
+c   1) we drop all shear terms, so the tensor is diagonal in 2-D.
+c   2) the dimensioned constant l^2 in 2-D is chosen using the algorithm
+c      lsq = qcon*  max(dx1,dx2)**2.  This gives an isotropic tensor,
+c      but may lead to unsatisfactorily large viscosity coefficients
+c      for zones with axial ratios greatly different than 1.
+c  In addition, a linear artificial viscosity may be added to smooth
+c  the flow in stagnant regions.
+c
+c  EXTERNALS: ISMAX
+c
+c  LOCALS:
+c-----------------------------------------------------------------------
+      implicit NONE
+#include "param.h"
+#include "grid.h"
+#include "field.h"
+#include "root.h"
+#include "scratch.h"
+      integer i,j,imax,jmax
+      REAL    dv11(in,jn),dv22(in,jn),dv33(in,jn),divv(in,jn)
+     1 ,lsq(in,jn)
+      REAL    qa(in),qb(jn),qgradv(in)
+      REAL    q11(ijn),q22(jn),dt1ij(in),dt1j(jn),dt2ij(jn),dt2i(in)
+      REAL    v1zc,qconn,dt1,dt2,divq,dvel
+      equivalence (dv11,wb),(dv22,wc),(dv33,wd)
+      equivalence (q11,wij0),(q22,wj0),(dt1ij,wi0),(dt1j,wj1)
+     &           ,(dt2ij,wj2),(dt2i,wi1),(qgradv,wi2)
+c
+      integer  ismax
+      external ismax
+c\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\/////////////////////////////////////
+c=======================================================================
+c  Compute diagonal terms of symmetrized velocity tensor, and velocity
+c  divergence. Begin with a 1-D problem in the 1-direction.
+c
+      if (nx2z .eq. 1) then
+        do 20 j=js,je
+          qa(ii(j)) = g2a(ii(j))*g31a(ii(j))*v1(ii(j),j)
+          do 10 i=ii(j),io(j)
+            v1zc        = 0.5*(v1(i,j) + v1(i+1,j))
+            dv11(i  ,j) = (v1(i+1,j) - v1(i,j))*dx1ai(i)
+            dv22(i  ,j) = v1zc/g2 b(i)*dg2 bd1(i)
+            dv33(i  ,j) = v1zc/g31b(i)*dg31bd1(i)
+            qa  (i+1  ) = g2a(i+1)*g31a(i+1)*v1(i+1,j)
+            divv(i  ,j) = (qa(i+1) - qa(i))/dvl1a(i)
+10        continue
+20      continue
+c
+c  A 1-D problem in the 2-direction
+c
+      else
+        if (nx1z .eq. 1) then
+        do 40 i=is,ie
+          qb(ji(i)) = g32a(ji(i))*v2(i,ji(i))
+          do 30 j=ji(i),jo(i)
+            dv11(i,j  ) = 0.0 
+            dv22(i,j  ) = (v2(i,j+1) - v2(i,j))/(g2b(i)*dx2a(j))
+            dv33(i,j  ) = 0.5*(v2(i,j) + v2(i,j+1))/(g2b(i)*g32b(j))
+     &                  *dg32bd2(j) 
+            qb  (  j+1) = g32a(j+1)*v2(i,j+1)
+            divv(i,j  ) =  (qb(j+1) - qb(j))/(g2b(i)*dvl2a(j))
+30        continue
+40      continue
+c
+c  A 2-D problem
+c
+        else
+        do 60 j=js,je
+          qa(ii(j)) = g2a(ii(j))*g31a(ii(j))*v1(ii(j),j)
+          do 50 i=ii(j),io(j)
+            v1zc      = 0.5*(v1(i,j) + v1(i+1,j))
+            dv11(i,j) =  (v1(i+1,j) - v1(i,j))*dx1ai(i)
+            dv22(i,j) = ((v2(i,j+1) - v2(i,j))*dx2ai(j)
+     &            + v1zc*dg2bd1(i))/g2b(i)
+            dv33(i,j) = v1zc/g31b(i)*dg31bd1(i)
+     &          + 0.5*(v2(i,j+1) + v2(i,j))/(g2b(i)*g32b(j))*dg32bd2(j)
+            qa  (i+1  ) = g2a(i+1)*g31a(i+1)*v1(i+1,j)
+            divv(i,j) = (qa(i+1) - qa(i))/dvl1a(i)
+     &       + (g32a(j+1)*v2(i,j+1) - g32a(j)*v2(i,j))/(g2b(i)*dvl2a(j))
+50        continue
+60      continue
+        endif
+      endif
+c
+c  Compute coefficient of the viscosity tensor.  The algoritm used
+c  depends on if the problem is 1-D in the 1- or 2-directions, or if it
+c  is 2-D.  In all cases the coefficient is zero if DIV(v) > 0
+c  (no compression).  The factor of 1.5 multiplying qcon makes it
+c  identical to that used in VISCUS.
+c
+      qconn = 1.5*qcon
+      do 80 j=js,je
+        do 70 i=ii(j),io(j)
+          lsq(i,j) = 0.0
+c  1-d problem in the 1-direction
+          if (divv(i,j) .lt. 0.0 .and. nx2z .eq. 1)
+     &      lsq(i,j) = qconn*     (dx1a(i)               )**2
+c  1-d problem in the 2-direction
+          if (divv(i,j) .lt. 0.0 .and. nx1z .eq. 1)
+     &      lsq(i,j) = qconn*     (        g2b(i)*dx2a(j))**2
+c  2-d problem
+          if (divv(i,j) .lt. 0.0 .and. nx1z .gt. 1 .and. nx2z .gt. 1)
+     &      lsq(i,j) = qconn*  max(dx1a(i),g2b(i)*dx2a(j))**2
+70        continue
+80      continue
+c
+c  Now update v1 with DIV(Q) term
+c
+      dt1 = 0.0
+      if (nx1z .gt. 1) then
+        do 110 j=js,je
+          do 90 i=ii(j),io(j)
+            q11(i) = 0.0
+            if (divv(i,j) .lt. 0.0) q11(i) = g2b(i)**2*g31b(i)*d(i,j)
+     &        *lsq(i,j)*divv(i,j)*(dv11(i,j) - divv(i,j)/3.0)
+            dt1ij(i) = (lsq(i,j)*divv(i,j)*dx1ai(i)**2)**2
+90        continue
+          imax = ismax(nx1(j),dt1ij(ii(j)),1) + iim1(j)
+          dt1j(j) = dt1ij(imax)
+c
+          do 100 i=iip1(j),io(j)
+            divq = (q11(i) - q11(i-1))/(g2a(i)*dvl1b(i))
+            v1(i,j) = v1(i,j) - dt*2.0/(d(i-1,j) + d(i,j))*divq
+100       continue
+110     continue
+        jmax = ismax(nx2z,dt1j(js),1) + js - 1
+        dt1  = dt1j(jmax)
+      endif
+c
+c  Update v2 with DIV(Q) term
+c
+      dt2 = 0.0
+      if (nx2z .gt. 1) then
+        do 140 i=is,ie
+          do 120 j=ji(i),jo(i)
+            q11(j) = 0.0
+            q22(j) = 0.0
+            if (divv(i,j) .lt. 0.0) q11(j) = d(i,j)
+     &         *lsq(i,j)*divv(i,j)*(dv11(i,j) - divv(i,j)/3.0)
+            if (divv(i,j) .lt. 0.0) q22(j) = g32b(j)**2*d(i,j)
+     &         *lsq(i,j)*divv(i,j)*(dv22(i,j) - divv(i,j)/3.0)
+            dt2ij(j) = (lsq(i,j)*divv(i,j)/(g2b(i)*dx2a(j))**2)**2
+120       continue
+          jmax = ismax(nx2(i),dt2ij(ji(i)),1) + jim1(i)
+          dt2i(i) = dt2ij(jmax)
+c
+          do 130 j=jip1(i),jo(i)
+            divq = (     (q22(j) - q22(j-1))/(dvl2b(j))
+     &           + 0.5*(q11(j) + q11(j-1))*dg32ad2(j))/(g2b(i)*g32a(j))
+            v2(i,j) = v2(i,j) - dt*2.0/(d(i,j-1) + d(i,j))*divq
+130       continue
+140     continue
+        imax = ismax(nx1z,dt2i(is),1) + is - 1
+        dt2  = dt2i(imax)
+      endif
+c
+c  Update energy density with Q:GRAD(v) term
+c
+      do 160 j=js,je
+        do 150 i=ii(j),io(j)
+          qgradv(i) = 0.0
+          if (divv(i,j) .lt. 0.0)
+     &      qgradv(i) = lsq(i,j)*d(i,j)*divv(i,j)
+     &                *((dv11(i,j) - dv22(i,j))**2 
+     &                + (dv11(i,j) - dv33(i,j))**2
+     &                + (dv33(i,j) - dv22(i,j))**2)/3.0
+          e(i,j) = e(i,j) - dt*qgradv(i)
+150       continue
+160     continue
+c
+c  Compute viscus timestep limit.  The numerical factor gives a timstep
+c  algorithm identical to that used in VISCUS.
+c
+      dtqqi2 = 64.0/9.0*  max(dt1,dt2)
+c
+c  Add linear artificial viscosity (if necessary) to smooth stagnant
+c  flows (mostly used for test problems).
+c
+      if (qlin .eq. 0.0) return
+c
+      if (nx1z .gt. 1) then
+      do 180 j=js,je
+        dvel = v1(iip1(j),j) - v1(ii(j),j)
+        qa(ii(j)) = -dt*d(ii(j),j)*dvel*qlin*sqrt(e(ii(j),j)/d(ii(j),j))
+        e(ii(j),j) = e(ii(j),j) - dvel*dx1ai(ii(j))*qa(ii(j))
+        do 170 i=ii(j),io(j)
+          dvel = v1(i+1,j) - v1(i,j)
+          qa(i) = -dt*d(i,j)*dvel*qlin*sqrt(e(i,j)/d(i,j))
+          v1(i,j) = v1(i,j) - (qa(i) - qa(i-1))*dx1bi(i)
+          e (i,j) = e (i,j) - dvel*dx1ai(i)*qa(i)
+170     continue
+180   continue
+      endif
+c
+      if (nx2z .gt. 1) then
+      do 200 i=is,ie
+        dvel = v2(i,jip1(i)) - v2(i,ji(i))
+        qb(ji(i)) = -dt*d(i,ji(i))*dvel*qlin*sqrt(e(i,ji(i))/d(i,ji(i)))
+        e(i,ji(i)) = e(i,ji(i)) - dvel/(g2b(i)*dx2a(ji(i)))*qb(ji(i))
+        do 190 j=ji(i),jo(i)
+          dvel = v2(i,j+1) - v2(i,j)
+          qb(j) = -dt*d(i,j)*dvel*qlin*sqrt(e(i,j)/d(i,j))
+          v2(i,j) = v2(i,j) - (qb(j) - qb(j-1))/(g2b(i)*dx2b(j))
+          e (i,j) = e (i,j) - dvel/(g2b(i)*dx2a(j))*qb(j)
+190     continue
+200   continue
+      endif
+c
+      return
+      end

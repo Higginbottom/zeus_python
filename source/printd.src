@@ -1,0 +1,102 @@
+#include "zeus2d.def"
+c=======================================================================
+c////////////////////////  SUBROUTINE PRINTD  \\\\\\\\\\\\\\\\\\\\\\\\\\
+c
+      subroutine printd
+c
+c  FORMATTED WRITE OF SELECTED VARIABLES
+c
+c     written by: Jim Stone
+c     date:       February,1993
+c     modified1: 
+c
+c  PURPOSE:  Dumps scalar "history" variables in a formatted write
+c  for analysis.  Currently implemented variables are:
+c   scal( 1) = time
+c   scal( 2) = dt
+c   scal( 3) = mass
+c   scal( 4) = internal energy
+c   scal( 5) = 0.5*d*v1**2
+c   scal( 6) = 0.5*d*v2**2
+c   scal( 7) = 0.5*d*v3**2
+c   scal( 8) = d*v1(ie) -- mass loss rate through the inner boundary
+c   scal( 9) = b1**2
+c   scal(10) = b2**2
+c   scal(11) = b3**2
+c   scal(12) = radiation energy
+cc   scal( 8) = b1**2
+cc   scal( 9) = b2**2
+cc   scal(10) = b3**2
+cc   scal(11) = radiation energy
+c  More variables can be added by increasing nscal, adding the
+c  appropriate lines to the do 10 loop, and changing the 2001 format
+c  statement
+c
+c  LOCALS:
+c-----------------------------------------------------------------------
+      implicit NONE
+#include "param.h"
+#include "grid.h"
+#include "field.h"
+#include "root.h"
+      integer i,j,nscal,ig
+      parameter(nscal=12)
+      REAL scal(nscal),dvol,qa,qb,dsur,fcor
+c\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\///////////////////////////////
+c=======================================================================
+c
+      qa = (x1a(ie+1)-x1a(is))*(x2a(je+1)-x2a(js))
+      qb = (x2a(je+1)-x2a(js))
+      fcor=1e-30
+      do 1 i=1,nscal
+        scal(i) = 0.0
+1     continue
+      scal(1) = time
+      scal(2) = dt
+c
+c  Integrate quantities
+c
+      ig=2
+      do 10 j=js,je
+      do 10 i=is,ie
+	if (ig.eq.0) then
+         dvol = dx1a(i)*dx2a(j)/qa
+         dsur = dx2a(j)/qb
+	endif
+	if (ig.eq.2) then 
+         dvol=x1b(i)**2*sin(x2b(j))*dx1a(i)*dx2a(j)
+         dsur=x1b(i)**2*sin(x2b(j))*dx2a(j)
+	endif 
+c        dvol = dx1a(i)*dx2a(j)/qa
+        scal( 3) = scal( 3) + dvol*d(i,j)*fcor
+        scal( 4) = scal( 4) + dvol*e(i,j)*fcor
+        scal( 5) = scal( 5) + dvol*d(i,j)*0.25*(v1(i,j)+v1(i+1,j))**2
+     1  *fcor
+        scal( 6) = scal( 6) + dvol*d(i,j)*0.25*(v2(i,j)+v2(i,j+1))**2
+     1  *fcor
+#ifdef ROTATE
+        scal( 7) = scal( 7) + dvol*d(i,j)*v3(i,j)**2*fcor
+#endif
+        if (i .eq. ie)  then 
+         scal(8) = scal(8) + dsur*d(i,j)*0.5*(v1(i,j)+v1(i+1,j))
+        endif 
+#ifdef MHD
+        scal( 9) = scal( 9) + dvol*0.125*(b1(i,j)+b1(i+1,j))**2
+        scal( 10) = scal( 10) + dvol*0.125*(b2(i,j)+b2(i,j+1))**2
+#ifdef ROTATE
+        scal(11) = scal(11) + dvol*0.5*b3(i,j)**2
+#endif
+#endif
+#ifdef RAD
+        scal(12) = scal(12) + dvol*er(i,j)
+#endif
+10    continue
+c
+c  Write out variables to file connected to unit 3 opened in MAIN
+c  program unit (zeus2d.src)
+c
+      write(3,2001) (scal(i),i=1,nscal)
+2001  format(1x,1pe12.5,11e14.5)
+c
+      return
+      end

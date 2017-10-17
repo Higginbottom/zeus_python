@@ -1,0 +1,439 @@
+#include "zeus2d.def"
+c=======================================================================
+c/////////////////////////  SUBROUTINE GGEN  \\\\\\\\\\\\\\\\\\\\\\\\\\\
+c
+      subroutine ggen
+c
+c  PURPOSE:  Initializes the grid in a new run according to the control
+c  parameters in the input deck namelists "ggen1" and ggen2".  All grid
+c  variables are initialized, except the indices for the grid boundaries
+c  (done in setup).
+c
+c  EXTERNALS: CVMGT
+c
+c  LOCALS:
+c-----------------------------------------------------------------------
+      implicit NONE
+#include "param.h"
+#include "grid.h"
+#include "root.h"
+#include "scratch.h"
+      integer  nbl,igrid,imin,imax,jmin,jmax,iter,i,j
+      REAL     x1min,x1max,x1rat,dx1min,dfndx1r,x1r,deltx1r,errx1r
+     &        ,x2min,x2max,x2rat,dx2min,dfndx2r,x2r,deltx2r,errx2r
+     &        ,fn,vol1a(in),vol1b(in),qa,qb,qc,qd
+      logical  lgrid
+c
+      equivalence (vol1a,wi0) , (vol1b,wi1)
+      namelist /ggen1/ nbl,x1min,x1max,igrid,x1rat,dx1min,lgrid
+      namelist /ggen2/ nbl,x2min,x2max,igrid,x2rat,dx2min,lgrid
+c\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\//////////////////////////////////
+c=======================================================================
+c-----------  GENERATE X1 GRID  ----------------------------------------
+c  Read in blocks of x1 grid zones.  Note we loop over read statement
+c  until all blocks are read (signalled by reading in lgrid = .true.).
+c  We can zone within each block completely independently of the others,
+c  however we must ensure the starting position of one block (x1min) is
+c  the same as the ending position (x1max) of the previous.
+c   nbl    is number of active zones in block read in
+c   x1min  is x1a(imin) ; bottom position of block
+c   x1max  is x1a(imax) ; top    position of block
+c   igrid  selects zoning type; we solve the zoning equation:
+c            x1max = x1min + SUM OVER N[dx1min*x1rat**n]  ; so we must 
+c          input either dx1min or x1rat (the other is calculated)
+c     igrid = 1 uses input ratios          => x1rat  = dx1a(i+1)/dx1a(i)
+c     igrid = 2 uses input inner zone size => dx1min = dx1a(imin)
+c   lgrid  logical flag for additional blocks ( =.true. reads another)
+c   imax,imin  are indices of top and bottom of block
+c
+      is   = 3
+      imax = is
+      nbl   = 1
+      x1min = 0.0
+      x1max = 0.0
+      igrid = 0
+      x1rat = 0.0
+      dx1min= 0.0
+      lgrid = .false.
+c
+10    continue
+      read (1,ggen1)
+      write(2,ggen1)
+c
+      imin = imax
+      imax = imax + nbl
+      if (imax-1 .gt. in-2) then
+        write(6,"(/1x,'ERROR: number of zones in 1-direction exceeds'
+     &  ,' array bounds',/1x,'imax = ',i4,'  in = ',i4)") imax,in
+        stop
+      endif
+c
+c  1)  Compute dx1a(imin) from given value of x1rat.
+c
+      if (igrid .eq. 1) then
+        if (x1rat .eq. 1.0)  then
+          dx1a(imin) = (x1max-x1min)/float(nbl)
+        else
+          dx1a(imin) = (x1max-x1min)*(x1rat-1.0)/(x1rat**nbl - 1.0)
+        endif
+      endif
+c
+c  2)  Compute x1rat from given value of dx1min.  Newton Raphson iteration
+c  is required to find the root (x1rat) of the function:
+c     fn(x1r) = (x1max-x1min) - dx1a(imin)*[(x1r)**nbl - 1]/[x1r-1] = 0
+c
+      if (igrid .eq. 2) then
+        dx1a(imin) = dx1min
+        x1r = 1.01
+        do 20 iter=1,20
+          fn = (x1max - x1min) - dx1min*(x1r**nbl - 1.0)/(x1r - 1.0)
+          dfn dx1r =  -nbl*dx1min*x1r**(nbl - 1)/(x1r - 1.0)
+     .               + dx1min*(x1r**nbl - 1.0)/(x1r - 1.0)**2
+          deltx1r  = -fn/dfndx1r
+          err x1r  = abs(deltx1r/x1r)
+          x1r = x1r + deltx1r
+          if (errx1r .lt. 1.0e-6) goto 30
+20      continue
+        write(6,"(1x,'ERROR from GRIDI: Newton-Raphson did not converge'
+     &  ,' for x1rat',/1x,'imin = ',i3,' x1r = ',1pe12.5,' deltx1r = '
+     &  ,1e12.5,' fn = ',1e12.5)") imin,x1r,deltx1r,fn
+        stop
+c
+30      continue
+        x1rat = x1r
+      endif
+c
+c  Set up x1a grid lines from i=imin to imax, using known values of
+c  x1min, x1rat.  Then go back and read another block of x1 grid zones,
+c  if needed.
+c
+      x1a(imin) = x1min
+      do 40 i=imin+1,imax
+        dx1a(i) = dx1a(i-1) * x1rat
+         x1a(i) =  x1a(i-1) + dx1a(i-1)
+40    continue
+      if (.not. lgrid) go to 10
+c
+c  Setup all grid zones, scale factors in x1 direction
+c
+      ie = imax
+c
+      dx1a(is-1) = dx1a(is  )
+      dx1a(is-2) = dx1a(is-1)
+      dx1a(ie+1) = dx1a(ie  ) * x1rat
+      dx1a(ie+2) = dx1a(ie+1) * x1rat
+c
+      x1a (is-1) = x1a (is  ) - dx1a(is-1)
+      x1a (is-2) = x1a (is-1) - dx1a(is-2)
+      x1a (ie+1) = x1a (ie  ) + dx1a(ie  )
+      x1a (ie+2) = x1a (ie+1) + dx1a(ie+1)
+c
+      dx1b(is-2) = dx1a(is-2)
+       x1b(is-2) = x1a (is-1) - 0.5 * dx1a(is-2)
+      do 50 i=is-1,ie+2
+         x1b(i) = x1a(i) + 0.5*dx1a(i)
+        dx1b(i) = x1b(i) - x1b(i-1)
+50    continue
+      do 60 i=is-2,ie+2
+        dx1a i(i) = 1.0 / dx1a(i)
+        dx1b i(i) = 1.0 / dx1b(i)
+#ifdef XY
+         g2 a (i) = 1.0
+         g2 b (i) = 1.0
+         g31a (i) = 1.0
+         g31b (i) = 1.0
+        dg2 ad1(i) = 0.0
+        dg2 bd1(i) = 0.0
+        dg31ad1(i) = 0.0
+        dg31bd1(i) = 0.0
+#endif
+#ifdef RZ
+         g2 a (i) = 1.0
+         g2 b (i) = 1.0
+         g31a (i) = 1.0
+         g31b (i) = 1.0
+        dg2 ad1(i) = 0.0
+        dg2 bd1(i) = 0.0
+        dg31ad1(i) = 0.0
+        dg31bd1(i) = 0.0
+#endif
+#ifdef RT
+         g2 a (i) = x1a(i)
+         g2 b (i) = x1b(i)
+         g31a (i) = x1a(i)
+         g31b (i) = x1b(i)
+        dg2 ad1(i) = 1.0
+        dg2 bd1(i) = 1.0
+        dg31ad1(i) = 1.0
+        dg31bd1(i) = 1.0
+#ifdef GRAV
+cRAF
+cRAF Compute 1/r for multipole expansion terms in the gravity module.
+cRAF
+cRAF ****************************************************************
+cRAF * IT IS ASSUMED THAT 1/r DOES NOT VANISH ON ANY BOUNDARY ALONG *
+cRAF * WHICH THE POTENTIAL IS TO BE FOUND USING THE MULTIPOLE       *
+cRAF * EXPANSION!!                                                  *
+cRAF ****************************************************************
+cRAF
+        if ( x1b(i) .ne. 0.0 ) then
+          x1bi(i) = 1.0 / x1b(i)
+        else
+          x1bi(i) = 0.0
+        endif
+#endif
+#endif
+60    continue
+c
+c-----------  X2 GRID GENERATOR  ---------------------------------------
+c  Variable names and values are the same as used in x1 grid generator
+c
+      js    = 3
+      jmax  = js
+      nbl   = 1
+      x2min = 0.0
+      x2max = 0.0
+      igrid = 0
+      x2rat = 1.0
+      dx2min= 0.0
+      lgrid =.false.
+c
+110   continue
+      read (1,ggen2)
+      write(2,ggen2)
+c
+      jmin = jmax
+      jmax = jmax + nbl
+      if (jmax-1 .gt. jn-2) then
+        write(6,"(/1x,'ERROR: number of zones in 2-direction exceeds'
+     &  ,' array bounds',/1x,'jmax = ',i4,'  jn = ',i4)") jmax,jn
+        stop
+      endif
+c
+c  1)  Compute dx2a(jmin) from given value of x2rat.
+c
+      if (igrid .eq. 1) then
+        if (x2rat .eq. 1.0) then
+          dx2a(jmin) = (x2max-x2min)/float(nbl)
+        else
+          dx2a(jmin) = (x2max-x2min)*(x2rat-1.0) / (x2rat**nbl - 1.0)
+        endif
+      endif
+c
+c  2)  Compute x2rat from given value of dx2min using NR iterations
+c  NOTE: THIS CODE HARWIRED TO USE DX2A FROM END OF LAST BLOCK
+c        AS INPUT DX2MIN
+c
+      if (igrid .eq. 2) then
+        dx2min = dx2a(jmin-1)
+        dx2a(jmin) = dx2min
+        x2r = 1.01
+        do 120 iter=1,20
+          fn = (x2max - x2min) - dx2min*(x2r**nbl - 1.0)/(x2r - 1.0)
+          dfn dx2r =  -nbl*dx2min*x2r**(nbl - 1)/(x2r - 1.0)
+     .               + dx2min*(x2r**nbl - 1.0)/(x2r - 1.0)**2
+          deltx2r  = -fn/dfndx2r
+          err x2r  = abs(deltx2r/x2r)
+          x2r = x2r + deltx2r
+          if (errx2r .lt. 1.0e-6) goto 130
+120     continue
+        write(6,"(1x,'ERROR from GRIDI: Newton-Raphson did not converge'
+     &  ,' for x2rat',/1x,'jmin = ',i3,' x2r = ',1pe12.5,' deltx2r = '
+     &  ,1e12.5,' fn = ',1e12.5)") jmin,x2r,deltx2r,fn
+        stop
+c
+130     continue
+        x2rat = x2r
+      endif
+c
+c  Set up x2a grid lines from j=jmin to jmax, using known values of
+c  x2min, x2rat.  Then go back and read another block of x2 grid zones,
+c  if needed.
+c
+      x2a(jmin) = x2min
+      do 140 j=jmin+1,jmax
+        dx2a(j) = dx2a(j-1) * x2rat
+         x2a(j) =  x2a(j-1) + dx2a(j-1)
+140   continue
+      if (.not. lgrid) go to 110
+c
+c  Setup all grid zones, scale factors in x2 direction
+c
+      je = jmax
+c
+      dx2a(js-1) = dx2a(js  )
+      dx2a(js-2) = dx2a(js-1)
+      dx2a(je+1) = dx2a(je  ) * x2rat
+      dx2a(je+2) = dx2a(je+1) * x2rat
+c
+       x2a(js-1) = x2a (js  ) - dx2a(js-1)
+       x2a(js-2) = x2a (js-1) - dx2a(js-2)
+       x2a(je+1) = x2a (je  ) + dx2a(je  )
+       x2a(je+2) = x2a (je+1) + dx2a(je+1)
+c
+      dx2b(js-2) = dx2a(js-2)
+       x2b(js-2) = x2a (js-1) - 0.5 * dx2a(js-2)
+      do 150 j=js-1,je+2
+         x2b(j) = x2a(j) + 0.5 * dx2a(j)
+        dx2b(j) = x2b(j) - x2b(j-1)
+150   continue
+      do 160 j=js-2,je+2
+        dx2a i(j) = 1.0 / dx2a(j)
+        dx2b i(j) = 1.0 / dx2b(j)
+#ifdef XY
+        g32a (j) = 1.0
+        g32b (j) = 1.0
+        g4 a (j) = x2a(j)
+        g4 b (j) = x2b(j)
+       dg32ad2(j) = 0.0
+       dg32bd2(j) = 0.0
+#endif
+#ifdef RZ
+        g32a (j) = x2a(j)
+        g32b (j) = x2b(j)
+        g4 a (j) = 0.5*x2a(j)**2
+        g4 b (j) = 0.5*x2b(j)**2
+       dg32ad2(j) = 1.0
+       dg32bd2(j) = 1.0
+#endif
+#ifdef RT
+        g32a (j) = sin( x2a(j) )
+        g32b (j) = sin( x2b(j) )
+        g4 a (j) =-cos( x2a(j) )
+        g4 b (j) =-cos( x2b(j) )
+       dg32ad2(j) = cos( x2a(j) )
+       dg32bd2(j) = cos( x2b(j) )
+#endif
+160   continue
+c
+c  Volume factors used in integral form of difference equations, and in
+c  transport module
+c
+#ifdef XY
+      vfac = 1.0
+#endif
+#ifdef RZ
+      vfac = 1.0
+#endif
+#ifdef RT
+      vfac = 1.0/3.0
+#endif
+c
+      vol1a(is-2) = g2a(is-2)*g31a(is-2)*x1a(is-2)
+      do 200 i=is-2,ie+1
+        vol1a(i+1) = g2a(i+1)*g31a(i+1)*x1a(i+1)
+        dvl1a(i  ) = vfac*(vol1a(i+1) - vol1a(i))
+200   continue
+c
+      vol1b(is-2) = g2b(is-2)*g31b(is-2)*x1b(is-2)
+      do 210 i=is-2,ie+1
+        vol1b(i+1) = g2b(i+1)*g31b(i+1)*x1b(i+1)
+        dvl1b(i+1) = vfac*(vol1b(i+1) - vol1b(i))
+210   continue
+c
+      do 220 j=js-2,je+1
+        dvl2a(j  ) = g4a(j+1) - g4a(j)
+220   continue
+      do 230 j=js-2,je+1
+        dvl2b(j+1) = g4b(j+1) - g4b(j)
+230   continue
+c
+c  Compute and store PPA coefficients
+c
+      do 240 i=is,ie+1
+        qa = dx1b(i+1) + dx1b(i)
+        qb = 1.0/(dx1b(i-1) + qa)
+        ppafc1(1,i) = qb/(dx1b(i+1) + dx1b(i))
+        ppafc1(2,i) = qb/(dx1b(i-1) + dx1b(i))
+        ppafc1(3,i) = (2.0*dx1b(i-1)+dx1b(i))*dx1b(i)*ppafc1(1,i)
+        ppafc1(4,i) = (2.0*dx1b(i+1)+dx1b(i))*dx1b(i)*ppafc1(2,i)
+240   continue
+      do 250 i=is,ie
+        qa = dx1b(i+1) + dx1b(i)
+        qc = dx1b(i-1) + dx1b(i+2) + qa
+        ppafc1(7,i) = dx1b(i  )*(dx1b(i  )+dx1b(i-1))
+     &                 /((2.0*dx1b(i)+dx1b(i+1))*qc)
+        ppafc1(8,i) = dx1b(i+1)*(dx1b(i+1)+dx1b(i+2))
+     &                 /((2.0*dx1b(i+1)+dx1b(i))*qc)
+        qd = 2.0/qa*(dx1b(i+1)*ppafc1(7,i)-dx1b(i)*ppafc1(8,i))
+        ppafc1(5,i) = dx1b(i  )/qa + qd
+        ppafc1(6,i) = dx1b(i+1)/qa - qd
+250   continue
+      do 260 i=is-1,ie+1
+        qa = dx1a(i-1) + dx1a(i)
+        qb = 1.0/(dx1a(i+1) + qa)
+        ppazc1(1,i) = qb/(dx1a(i+1) + dx1a(i))
+        ppazc1(2,i) = qb/(dx1a(i-1) + dx1a(i))
+        ppazc1(3,i) = (2.0*dx1a(i-1)+dx1a(i))*dx1a(i)*ppazc1(1,i)
+        ppazc1(4,i) = (2.0*dx1a(i+1)+dx1a(i))*dx1a(i)*ppazc1(2,i)
+260   continue
+      do 270 i=is,ie+1
+        qa = dx1a(i-1) + dx1a(i)
+        qc = dx1a(i-2) + dx1a(i+1) + qa
+        ppazc1(7,i) = dx1a(i-1)*(dx1a(i-1)+dx1a(i-2))
+     &                 /((2.0*dx1a(i-1)+dx1a(i  ))*qc)
+        ppazc1(8,i) = dx1a(i  )*(dx1a(i  )+dx1a(i+1))
+     &                 /((2.0*dx1a(i  )+dx1a(i-1))*qc)
+        qd = 2.0/qa*(dx1a(i)*ppazc1(7,i)-dx1a(i-1)*ppazc1(8,i))
+        ppazc1(5,i) = dx1a(i-1)/qa + qd
+        ppazc1(6,i) = dx1a(i  )/qa - qd
+270   continue
+      do 280 j=js,je+1
+        qa = dx2b(j+1) + dx2b(j)
+        qb = 1.0/(dx2b(j-1) + qa)
+        ppafc2(1,j) = qb/(dx2b(j+1) + dx2b(j))
+        ppafc2(2,j) = qb/(dx2b(j-1) + dx2b(j))
+        ppafc2(3,j) = (2.0*dx2b(j-1)+dx2b(j))*dx2b(j)*ppafc2(1,j)
+        ppafc2(4,j) = (2.0*dx2b(j+1)+dx2b(j))*dx2b(j)*ppafc2(2,j)
+280   continue
+      do 290 j=js,je
+        qa = dx2b(j+1) + dx2b(j)
+        qc = dx2b(j+2) + dx2b(j-1) + qa
+        ppafc2(7,j) = dx2b(j  )*(dx2b(j  )+dx2b(j-1))
+     &                 /((2.0*dx2b(j)+dx2b(j+1))*qc)
+        ppafc2(8,j) = dx2b(j+1)*(dx2b(j+1)+dx2b(j+2))
+     &                 /((2.0*dx2b(j+1)+dx2b(j))*qc)
+        qd = 2.0/qa*(dx2b(j+1)*ppafc2(7,j)-dx2b(j)*ppafc2(8,j))
+        ppafc2(5,j) = dx2b(j  )/qa + qd
+        ppafc2(6,j) = dx2b(j+1)/qa - qd
+290   continue
+      do 300 j=js-1,je+1
+        qa = dx2a(j-1) + dx2a(j)
+        qb = 1.0/(dx2a(j+1) + qa)
+        ppazc2(1,j) = qb/(dx2a(j+1) + dx2a(j))
+        ppazc2(2,j) = qb/(dx2a(j-1) + dx2a(j))
+        ppazc2(3,j) = (2.0*dx2a(j-1)+dx2a(j))*dx2a(j)*ppazc2(1,j)
+        ppazc2(4,j) = (2.0*dx2a(j+1)+dx2a(j))*dx2a(j)*ppazc2(2,j)
+300   continue
+      do 310 j=js,je+1
+        qa = dx2a(j-1) + dx2a(j)
+        qc = dx2a(j+1) + dx2a(j-2) + qa
+        ppazc2(7,j) = dx2a(j-1)*(dx2a(j-1)+dx2a(j-2))
+     &                 /((2.0*dx2a(j-1)+dx2a(j  ))*qc)
+        ppazc2(8,j) = dx2a(j  )*(dx2a(j  )+dx2a(j+1))
+     &                 /((2.0*dx2a(j  )+dx2a(j-1))*qc)
+        qd = 2.0/qa*(dx2a(j)*ppazc2(7,j)-dx2a(j-1)*ppazc2(8,j))
+        ppazc2(5,j) = dx2a(j-1)/qa + qd
+        ppazc2(6,j) = dx2a(j  )/qa - qd
+310   continue
+c
+c  is,ie [js,je] are starting and ending indices of ACTIVE i [j] zones,
+c  so modify accordingly
+c
+      ie = ie - 1
+      je = je - 1
+c
+
+      open(8,file='grid1a.dat',status='unknown')
+      do i=is-1,ie+1
+	write(8,'(1x,i3,4(1x,1e14.7))')i,x1a(i),x1b(i),dx1a(i),dx1b(i)
+      enddo
+      close(8)
+
+      open(8,file='grida.dat',status='unknown')
+      do  j=js-1,je+1
+	write(8,'(1x,i3,4(1x,1e14.7))')j,x2a(j),x2b(j),dx2a(j),dx2b(j)
+      enddo
+      close(8)
+      return
+      end

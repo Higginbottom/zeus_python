@@ -1,0 +1,702 @@
+#include "zeus2d.def"
+c=======================================================================
+c/////////////////////////  SUBROUTINES BVAL*  \\\\\\\\\\\\\\\\\\\\\\\\\
+c
+c  PURPOSE: These routines set boundary values for all field variables.
+c  For each variable **, there is a routine BVAL** contained below to
+c  compute boundary values.   Currently, the routines are BVALD, BVALE,
+c  BVALV1, BVALV2, BVALV3, BVALEMF, BVALB3, BVALER.  Boundary values
+c  are set for the first two zones beyond the boundary (except for ist)
+c  to allow for 3rd order interpolation, e.g. for the iib, boundary
+c  values are set for iim1(j) and iim2(j).  The corner zones
+c  [(ii-1,ji-1),(io+1,ji-1), etc] are set across the ijb and the ojb.
+c  Boundary values are set according to the the basic flow types
+c      nflo =  1  for reflecting
+c           = -1  for reflecting with inversion of 3-vectors
+c           =  2  for flow out
+c           =  3  for flow in
+c           =  4  for periodic
+c  For each variable, this is done on all four boundaries according to:
+c   niib(j) = nflo of inner i boundary on sweep j
+c   noib(j) = nflo of outer i boundary on sweep j
+c   nijb(k) = nflo of inner j boundary on sweep i
+c   nojb(k) = nflo of outer j boundary on sweep i
+c  However, since the boundary type for the magnetic field may differ
+c  from the fluid boundary type, boundary values in the mhd routines
+c  BVALEMF and BVALB3 are set according to the mhd boundary types:
+c      mflo =  1  for reflecting
+c           = -1  for reflecting with inversion of 3-vectors
+c           =  2  for flow out
+c           =  3  for flow in
+c           =  4  for periodic
+c           =  5  for reflection of hydro variables and continuous B
+c  where mflo for each boundary is stored in miib,moib,mijb,mojb
+c  Note that each loop vectorizes.
+c
+c  EXTERNALS: [none]
+c
+c\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\//////////////////////////////////
+c=======================================================================
+c---------------------  density boundary values  -----------------------
+      subroutine bvald
+      implicit NONE
+#include "param.h"
+#include "grid.h"
+#include "field.h"
+#include "bndry.h"
+      integer  i,j
+c
+c  inner i boundary
+cdir$ ivdep
+      do 10 j=js,je
+        if (abs(niib(j)) .eq. 1) then
+          d(iim1(j),j) = d    (ii  (j),j)
+          d(iim2(j),j) = d    (iip1(j),j)
+        else if (niib(j) .eq. 2) then
+          d(iim1(j),j) = d    (ii  (j),j)
+          d(iim2(j),j) = d    (iim1(j),j)
+        else if (niib(j) .eq. 3) then
+          d(iim1(j),j) = diim1(        j)
+          d(iim2(j),j) = diim2(        j)
+        else if (niib(j) .eq. 4) then
+          d(iim1(j),j) = d    (io  (j),j)
+          d(iim2(j),j) = d    (iom1(j),j)
+        endif
+10    continue
+c
+c  outer i boundary
+cdir$ ivdep
+      do 20 j=js,je
+        if (abs(noib(j)) .eq. 1) then
+          d(iop1(j),j) = d    (io  (j),j)
+          d(iop2(j),j) = d    (iom1(j),j)
+        else if (noib(j) .eq. 2) then
+          d(iop1(j),j) = d    (io  (j),j)
+          d(iop2(j),j) = d    (iop1(j),j)
+        else if (noib(j) .eq. 3) then
+          d(iop1(j),j) = diop1(        j)
+          d(iop2(j),j) = diop2(        j)
+        else if (noib(j) .eq. 4) then
+          d(iop1(j),j) = d    (ii  (j),j)
+          d(iop2(j),j) = d    (iip1(j),j)
+        endif
+20    continue
+c
+c  inner j boundary 
+cdir$ ivdep
+      do 30 i=is-2,ie+2
+        if (abs(nijb(i)) .eq. 1) then
+          d(i,jim1(i)) = d    (i,ji  (i))
+          d(i,jim2(i)) = d    (i,jip1(i))
+        else if (nijb(i) .eq. 2) then
+          d(i,jim1(i)) = d    (i,ji  (i))
+          d(i,jim2(i)) = d    (i,jim1(i))
+        else if (nijb(i) .eq. 3) then
+          d(i,jim1(i)) = djim1(i        )
+          d(i,jim2(i)) = djim2(i        )
+        else if (nijb(i) .eq. 4) then
+          d(i,jim1(i)) = d    (i,jo  (i))
+          d(i,jim2(i)) = d    (i,jom1(i))
+        endif
+30    continue
+c
+c  outer j boundary
+cdir$ ivdep
+      do 40 i=is-2,ie+2
+        if (abs(nojb(i)) .eq. 1) then
+          d(i,jop1(i)) = d    (i,jo  (i))
+          d(i,jop2(i)) = d    (i,jom1(i))
+        else if (nojb(i) .eq. 2) then
+          d(i,jop1(i)) = d    (i,jo  (i))
+          d(i,jop2(i)) = d    (i,jop1(i))
+        else if (nojb(i) .eq. 3) then
+          d(i,jop1(i)) = djop1(i        )
+          d(i,jop2(i)) = djop2(i        )
+        else if (nojb(i) .eq. 4) then
+          d(i,jop1(i)) = d    (i,ji  (i))
+          d(i,jop2(i)) = d    (i,jip1(i))
+        endif
+40    continue
+      return
+      end
+c
+c-------------------  energy density boundary values  ------------------
+c
+      subroutine bvale
+      implicit NONE
+#include "param.h"
+#include "grid.h"
+#include "field.h"
+#include "bndry.h"
+      integer i,j
+c
+c  inner i boundary
+cdir$ ivdep
+      do 10 j=js,je
+        if (abs(niib(j)) .eq. 1) then
+          e(iim1(j),j) = e    (ii  (j),j)
+          e(iim2(j),j) = e    (iip1(j),j)
+        else if (niib(j) .eq. 2) then
+          e(iim1(j),j) = e    (ii  (j),j)
+          e(iim2(j),j) = e    (iim1(j),j)
+        else if (niib(j) .eq. 3) then
+          e(iim1(j),j) = eiim1(        j)
+          e(iim2(j),j) = eiim2(        j)
+        else if (niib(j) .eq. 4) then
+          e(iim1(j),j) = e    (io  (j),j)
+          e(iim2(j),j) = e    (iom1(j),j)
+        endif
+10    continue
+c
+c  outer i boundary
+cdir$ ivdep
+      do 20 j=js,je
+        if (abs(noib(j)) .eq. 1) then
+          e(iop1(j),j) = e    (io  (j),j)
+          e(iop2(j),j) = e    (iom1(j),j)
+        else if (noib(j) .eq. 2) then
+          e(iop1(j),j) = e    (io  (j),j)
+          e(iop2(j),j) = e    (iop1(j),j)
+        else if (noib(j) .eq. 3) then
+          e(iop1(j),j) = eiop1(        j)
+          e(iop2(j),j) = eiop2(        j)
+        else if (noib(j) .eq. 4) then
+          e(iop1(j),j) = e    (ii  (j),j)
+          e(iop2(j),j) = e    (iip1(j),j)
+        endif
+20    continue
+c
+c  inner j boundary 
+cdir$ ivdep
+      do 30 i=is-2,ie+2
+        if (abs(nijb(i)) .eq. 1) then
+          e(i,jim1(i)) = e    (i,ji  (i))
+          e(i,jim2(i)) = e    (i,jip1(i))
+        else if (nijb(i) .eq. 2) then
+          e(i,jim1(i)) = e    (i,ji  (i))
+          e(i,jim2(i)) = e    (i,jim1(i))
+        else if (nijb(i) .eq. 3) then
+          e(i,jim1(i)) = ejim1(i        )
+          e(i,jim2(i)) = ejim2(i        )
+        else if (nijb(i) .eq. 4) then
+          e(i,jim1(i)) = e    (i,jo  (i))
+          e(i,jim2(i)) = e    (i,jom1(i))
+        endif
+30    continue
+c
+c  outer j boundary
+cdir$ ivdep
+      do 40 i=is-2,ie+2
+        if (abs(nojb(i)) .eq. 1) then
+          e(i,jop1(i)) = e    (i,jo  (i))
+          e(i,jop2(i)) = e    (i,jom1(i))
+        else if (nojb(i) .eq. 2) then
+          e(i,jop1(i)) = e    (i,jo  (i))
+          e(i,jop2(i)) = e    (i,jop1(i))
+        else if (nojb(i) .eq. 3) then
+          e(i,jop1(i)) = ejop1(i        )
+          e(i,jop2(i)) = ejop2(i        )
+        else if (nojb(i) .eq. 4) then
+          e(i,jop1(i)) = e    (i,ji  (i))
+          e(i,jop2(i)) = e    (i,jip1(i))
+        endif
+40    continue
+      return
+      end
+c
+c-----------------------  velocity in 1-direction  ---------------------
+c
+      subroutine bvalv1
+c
+c  Note that the range of active zones for v1 is only i=iip1(j),io(j)
+c  and j=ji(i),jo(i), so that the iib zones have different indices.
+c  Also, the flow out boundary uses a switch to ensure fluid can only
+c  flow OUT (boundary value set to 0 if it tries to flow in).
+c
+      implicit NONE
+#include "param.h"
+#include "grid.h"
+#include "field.h"
+#include "bndry.h"
+#include "scratch.h"
+      integer i,j
+      REAL    flx(jn)
+      equivalence (flx,wj0)
+c
+c  inner i boundary
+cdir$ ivdep
+      do 10 j=js,je
+        if(abs(niib(j)).eq. 1) then
+          v1(ii  (j),j) = vg1(ii(j))
+          v1(iim1(j),j) = 2.0*vg1(ii(j))-v1(iip1(j),j)
+        else if(niib(j).eq. 2) then
+          flx(j) = 1.0
+          if((v1(iip1(j),j) - vg1(ii(j))) .gt. 0.0) flx(j) = 0.0
+          v1(ii  (j),j) = flx(j)*v1(iip1(j),j)
+          v1(iim1(j),j) = v1(ii(j),j)
+        else if(niib(j).eq. 3) then
+          v1(ii  (j),j) = v1ii(j)
+          v1(iim1(j),j) = v1iim1(j)
+        else if(niib(j).eq. 4) then
+          v1(iim1(j),j) = v1(io(j),j)
+          v1(ii  (j),j)=.5*(v1(iim1(j),j)+v1(iip1(j),j))
+        endif
+10    continue
+c
+c  outer i boundary
+cdir$ ivdep
+      do 20 j=js,je
+        if(abs(noib(j)).eq. 1) then
+          v1(iop1(j),j) = vg1(iop1(j))
+          v1(iop2(j),j) = 2.0*vg1(iop1(j))-v1(io(j),j)
+        else if(noib(j).eq. 2) then
+          flx(j) = 1.0
+          if((v1(io(j),j) - vg1(iop1(j))) .lt. 0.0) flx(j) = 0.0
+          v1(iop1(j),j) = flx(j)*v1(io(j),j)
+          v1(iop2(j),j) = v1(iop1(j),j)
+        else if(noib(j).eq. 3) then
+          v1(iop1(j),j) = v1iop1(j)
+          v1(iop2(j),j) = v1iop2(j)
+        else if(noib(j).eq. 4) then
+          v1(iop2(j),j) = v1(iip1(j),j)
+          v1(iop1(j),j) = .5*(v1(io(j),j)+v1(iop2(j),j))
+        endif
+20    continue
+c
+c  inner j boundary 
+cdir$ ivdep
+      do 30 i=is-1,ie+2
+        if (abs(nijb(i)) .eq. 1) then
+          v1(i,jim1(i)) = v1    (i,ji  (i))
+          v1(i,jim2(i)) = v1    (i,jip1(i))
+        else if (nijb(i) .eq. 2) then
+          v1(i,jim1(i)) = v1    (i,ji  (i))
+          v1(i,jim2(i)) = v1    (i,jim1(i))
+        else if (nijb(i) .eq. 3) then
+          v1(i,jim1(i)) = v1jim1(i        )
+          v1(i,jim2(i)) = v1jim2(i        )
+        else if (nijb(i) .eq. 4) then
+          v1(i,jim1(i)) = v1    (i,jo  (i))
+          v1(i,jim2(i)) = v1    (i,jom1(i))
+        endif
+30    continue
+c
+c  outer j boundary
+cdir$ ivdep
+      do 40 i=is-1,ie+2
+        if (abs(nojb(i)) .eq. 1) then
+          v1(i,jop1(i)) = v1    (i,jo  (i))
+          v1(i,jop2(i)) = v1    (i,jom1(i))
+        else if (nojb(i) .eq. 2) then
+          v1(i,jop1(i)) = v1    (i,jo  (i))
+          v1(i,jop2(i)) = v1    (i,jop1(i))
+        else if (nojb(i) .eq. 3) then
+          v1(i,jop1(i)) = v1jop1(i        )
+          v1(i,jop2(i)) = v1jop2(i        )
+        else if (nojb(i) .eq. 4) then
+          v1(i,jop1(i)) = v1    (i,ji  (i))
+          v1(i,jop2(i)) = v1    (i,jip1(i))
+        endif
+40    continue
+      return
+      end
+c
+c-----------------------  velocity in 2-direction ----------------------
+c
+      subroutine bvalv2
+c
+c  Note that the range of active zones for v2 is only i=ii(j),io(j)
+c  and j=jip1(i),jo(i), so that the ijb zones have different indices.
+c  Also, the flow out boundary uses a switch to ensure fluid can only
+c  flow OUT (boundary value set to 0 if it tries to flow in).
+c
+      implicit NONE
+#include "param.h"
+#include "grid.h"
+#include "field.h"
+#include "bndry.h"
+#include "scratch.h"
+      integer  i,j
+      REAL     flx(in)
+      equivalence (flx,wi0)
+c
+c  inner i boundary
+cdir$ ivdep
+      do 10 j=js+1,je
+        if (abs(niib(j)) .eq. 1) then
+          v2(iim1(j),j) = v2    (ii  (j),j)
+          v2(iim2(j),j) = v2    (iip1(j),j)
+        else if (niib(j) .eq. 2) then
+          v2(iim1(j),j) = v2    (ii  (j),j)
+          v2(iim2(j),j) = v2    (iim1(j),j)
+        else if (niib(j) .eq. 3) then
+          v2(iim1(j),j) = v2iim1(        j)
+          v2(iim2(j),j) = v2iim2(        j)
+        else if (niib(j) .eq. 4) then
+          v2(iim1(j),j) = v2    (io  (j),j)
+          v2(iim2(j),j) = v2    (iom1(j),j)
+        endif
+10    continue
+c
+c  outer i boundary
+cdir$ ivdep
+      do 20 j=js+1,je
+        if (abs(noib(j)) .eq. 1) then
+          v2(iop1(j),j) = v2    (io  (j),j)
+          v2(iop2(j),j) = v2    (iom1(j),j)
+        else if (noib(j) .eq. 2) then
+          v2(iop1(j),j) = v2    (io  (j),j)
+          v2(iop2(j),j) = v2    (iop1(j),j)
+        else if (noib(j) .eq. 3) then
+          v2(iop1(j),j) = v2iop1(        j)
+          v2(iop2(j),j) = v2iop2(        j)
+        else if (noib(j) .eq. 4) then
+          v2(iop1(j),j) = v2    (ii  (j),j)
+          v2(iop2(j),j) = v2    (iip1(j),j)
+        endif
+20    continue
+c
+c  inner j boundary 
+cdir$ ivdep
+      do 30 i=is-2,ie+2
+        if(abs(nijb(i)).eq. 1) then
+          v2(i,ji  (i)) = vg2(ji(i))
+          v2(i,jim1(i)) = 2.0*vg2(ji(i)) - v2(i,jip1(i))
+        else if(nijb(i).eq. 2) then
+          flx(i) = 1.0
+          if((v2(i,jip1(i)) - vg2(ji(i))) .gt. 0.0) flx(i) = 0.0
+          v2(i,ji  (i)) = flx(i)*v2(i,jip1(i))
+          v2(i,jim1(i)) = v2(i,ji(i))
+        else if(nijb(i).eq. 3) then
+          v2(i,ji  (i)) = v2ji(i)
+          v2(i,jim1(i)) = v2jim1(i)
+        else if(nijb(i).eq. 4) then
+          v2(i,jim1(i)) = v2(i,jo(i))
+          v2(i,ji  (i))=.5*(v2(i,jim1(i))+v2(i,jip1(i)))
+        endif
+30    continue
+c
+c  outer j boundary
+cdir$ ivdep
+      do 40 i=is-2,ie+2
+        if(abs(nojb(i)).eq. 1) then
+          v2(i,jop1(i)) = vg2(jop1(i))
+          v2(i,jop2(i)) = 2.0*vg2(jop1(i))-v2(i,jo(i))
+        else if(nojb(i).eq. 2) then
+          flx(i) = 1.0
+          if((v2(i,jo(i)) - vg2(jop1(i))) .lt. 0.0) flx(i)=0.0
+          v2(i,jop1(i)) = flx(i)*v2(i,jo(i))
+          v2(i,jop2(i)) = v2(i,jop1(i))
+        else if(nojb(i).eq. 3) then
+          v2(i,jop1(i)) = v2jop1(i)
+          v2(i,jop2(i)) = v2jop2(i)
+        else if(nojb(i).eq. 4) then
+          v2(i,jop2(i)) = v2(i,jip1(i))
+          v2(i,jop1(i)) = .5*(v2(i,jo(i))+v2(i,jop2(i)))
+        endif
+40    continue
+      return
+      end
+c
+c-----------------  angular velocity boundary values  ------------------
+c
+      subroutine bvalv3
+c
+#ifdef ROTATE
+      implicit NONE
+#include "param.h"
+#include "grid.h"
+#include "field.h"
+#include "bndry.h"
+      integer i,j
+c
+c  inner i boundary
+cdir$ ivdep
+      do 10 j=js,je
+        if (abs(niib(j)) .eq. 1) then
+          v3(iim1(j),j) = float(niib(j)) * v3    (ii  (j),j)
+          v3(iim2(j),j) = float(niib(j)) * v3    (iip1(j),j)
+        else if (niib(j) .eq. 2) then
+          v3(iim1(j),j) = v3    (ii  (j),j)
+          v3(iim2(j),j) = v3    (ii  (j),j)
+        else if (niib(j) .eq. 3) then
+          v3(iim1(j),j) = v3iim1(        j)
+          v3(iim2(j),j) = v3iim2(        j)
+        else if (niib(j) .eq. 4) then
+          v3(iim1(j),j) = v3    (io  (j),j)
+          v3(iim2(j),j) = v3    (iom1(j),j)
+        endif
+10    continue
+c
+c  outer i boundary
+cdir$ ivdep
+      do 20 j=js,je
+        if (abs(noib(j)) .eq. 1) then
+          v3(iop1(j),j) = float(noib(j)) * v3    (io  (j),j)
+          v3(iop2(j),j) = float(noib(j)) * v3    (iom1(j),j)
+        else if (noib(j) .eq. 2) then
+          v3(iop1(j),j) = v3    (io  (j),j)
+          v3(iop2(j),j) = v3    (io  (j),j)
+        else if (noib(j) .eq. 3) then
+          v3(iop1(j),j) = v3iop1(        j)
+          v3(iop2(j),j) = v3iop2(        j)
+        else if (noib(j) .eq. 4) then
+          v3(iop1(j),j) = v3    (ii  (j),j)
+          v3(iop2(j),j) = v3    (iip1(j),j)
+        endif
+20    continue
+c
+c  inner j boundary 
+cdir$ ivdep
+      do 30 i=is-2,ie+2
+        if (abs(nijb(i)) .eq. 1) then
+          v3(i,jim1(i)) = float(nijb(i)) * v3    (i,ji  (i))
+          v3(i,jim2(i)) = float(nijb(j)) * v3    (i,jip1(i))
+        else if (nijb(i) .eq. 2) then
+          v3(i,jim1(i)) = v3    (i,ji  (i))
+          v3(i,jim2(i)) = v3    (i,ji  (i))
+        else if (nijb(i) .eq. 3) then
+          v3(i,jim1(i)) = v3jim1(i        )
+          v3(i,jim2(i)) = v3jim2(i        )
+        else if (nijb(i) .eq. 4) then
+          v3(i,jim1(i)) = v3    (i,jo  (i))
+          v3(i,jim2(i)) = v3    (i,jom1(i))
+        endif
+30    continue
+c
+c  outer j boundary
+cdir$ ivdep
+      do 40 i=is-2,ie+2
+        if (abs(nojb(i)) .eq. 1) then
+          v3(i,jop1(i)) = float(nojb(i)) * v3    (i,jo  (i))
+          v3(i,jop2(i)) = float(nojb(i)) * v3    (i,jom1(i))
+        else if (nojb(i) .eq. 2) then
+          v3(i,jop1(i)) = v3    (i,jo  (i))
+          v3(i,jop2(i)) = v3    (i,jo  (i))
+        else if (nojb(i) .eq. 3) then
+          v3(i,jop1(i)) = v3jop1(i        )
+          v3(i,jop2(i)) = v3jop2(i        )
+        else if (nojb(i) .eq. 4) then
+          v3(i,jop1(i)) = v3    (i,ji  (i))
+          v3(i,jop2(i)) = v3    (i,jip1(i))
+        endif
+40    continue
+#endif
+      return
+      end
+c
+c---------------   emf's (for constrained transport)   -----------------
+c
+      subroutine bvalemf(emf,term1,term2)
+#ifdef MHD
+      implicit NONE
+#include "param.h"
+#include "grid.h"
+#include "field.h"
+#include "bndry.h"
+      REAL emf(in,jn),term1(in,jn),term2(in,jn)
+      integer i,j
+c
+c  inner i boundary
+cdir$ ivdep
+      do 10 j=js,je+1
+        if (abs(miib(j)) .eq. 1) then
+          emf(iim1(j),j) =-emf(iip1(j),j)
+          emf(iim2(j),j) =-emf(iip2(j),j)
+        else if (miib(j) .eq. 2) then
+          emf(iim1(j),j) = emf(ii(j),j)
+          emf(iim2(j),j) = emf(ii(j),j)
+        else if (miib(j) .eq. 3) then
+          emf(ii  (j),j) = emfii  (j)
+          emf(iim1(j),j) = emfiim1(j)
+          emf(iim2(j),j) = emfiim2(j)
+        else if (miib(j) .eq. 4) then
+          emf(iim1(j),j) = emf(io  (j),j)
+          emf(iim2(j),j) = emf(iom1(j),j)
+          emf(ii  (j),j) = 0.5*(emf(iim1(j),j)+emf(iip1(j),j))
+        else if (miib(j) .eq. 5) then
+          emf(ii  (j),j) =                   - term2(iip1(j),j)
+          emf(iim1(j),j) = -term1(iip1(j),j) - term2(iip1(j),j)
+          emf(iim2(j),j) = -term1(iip2(j),j) - term2(iip2(j),j)
+        else if (miib(j) .eq. 6) then
+          emf(ii  (j),j) = -term2(ii(j),j)
+          emf(iim1(j),j) = emf(iip1(j),j)
+          emf(iim2(j),j) = emf(iip2(j),j)
+        endif
+10    continue
+c
+c  outer i boundary
+cdir$ ivdep
+      do 20 j=js,je+1
+        if (abs(moib(j)) .eq. 1) then
+          emf(iop1(j),j) = 0.0
+          emf(iop2(j),j) =-emf(io  (j),j)
+          emf(iop3(j),j) =-emf(iom1(j),j)
+        else if (moib(j) .eq. 2) then
+          emf(iop2(j),j) = emf(iop1(j),j)
+          emf(iop3(j),j) = emf(iop1(j),j)
+        else if (moib(j) .eq. 3) then
+          emf(iop1(j),j) = emfiop1(j)
+          emf(iop2(j),j) = emfiop2(j)
+          emf(iop3(j),j) = emfiop3(j)
+        else if (moib(j) .eq. 4) then
+          emf(iop2(j),j) = emf(iip1(j),j)
+          emf(iop3(j),j) = emf(iip2(j),j)
+          emf(iop1(j),j) = 0.5*(emf(io(j),j)+emf(iop2(j),j))
+        else if (moib(j) .eq. 5) then
+          emf(iop1(j),j) =                   - term2(io  (j),j)
+          emf(iop2(j),j) = -term1(io  (j),j) - term2(io  (j),j)
+          emf(iop3(j),j) = -term1(iom1(j),j) - term2(iom1(j),j)
+        else if (moib(j) .eq. 6) then
+          emf(iop1(j),j) = -term2(io(j),j)
+          emf(iop2(j),j) = emf(io  (j),j)
+          emf(iop3(j),j) = emf(iom1(j),j)
+        endif
+20    continue
+c
+c  inner j boundary
+cdir$ ivdep
+      do 30 i=is,ie+1
+        if (abs(mijb(i)) .eq. 1) then
+          emf(i,ji  (i)) = 0.0
+          emf(i,jim1(i)) = -emf(i,jip1(i))
+          emf(i,jim2(i)) = -emf(i,jip2(i))
+        else if (mijb(i) .eq. 2) then
+          emf(i,jim1(i)) = emf(i,jip1(i))
+          emf(i,jim2(i)) = emf(i,jip1(i))
+        else if (mijb(i) .eq. 3) then
+          emf(i,ji  (i)) = emfji  (i)
+          emf(i,jim1(i)) = emfjim1(i)
+          emf(i,jim2(i)) = emfjim2(i)
+        else if (mijb(i) .eq. 4) then
+          emf(i,jim1(i)) = emf(i,jo  (i))
+          emf(i,jim2(i)) = emf(i,jom1(i))
+        else if (mijb(i) .eq. 5) then
+          emf(i,ji  (i)) = term1(i,jip1(i))
+          emf(i,jim1(i)) = term1(i,jip1(i)) + term2(i,jip1(i))
+          emf(i,jim2(i)) = term1(i,jip2(i)) + term2(i,jip2(i))
+        else if (mijb(i) .eq. 6) then
+          emf(i,ji  (i)) = term1(i,jip1(i))
+          emf(i,jim1(i)) = emf(i,jip1(i))
+          emf(i,jim2(i)) = emf(i,jip2(i))
+        endif
+30    continue
+c
+c  outer j boundary
+cdir$ ivdep
+      do 40 i=is,ie+1
+        if (abs(mojb(i)) .eq. 1) then
+          emf(i,jop1(i)) = 0.0
+          emf(i,jop2(i)) = -emf(i,jo  (i))
+          emf(i,jop3(i)) = -emf(i,jom1(i))
+        else if (mojb(i) .eq. 2) then
+          emf(i,jop2(i)) = emf(i,jop1(i))
+          emf(i,jop3(i)) = emf(i,jop1(i))
+        else if (mojb(i) .eq. 3) then
+          emf(i,jop1(i)) = emfjop1(i)
+          emf(i,jop2(i)) = emfjop2(i)
+          emf(i,jop3(i)) = emfjop3(i)
+        else if (mojb(i) .eq. 4) then
+          emf(i,jop2(i)) = emf(i,jip1(i))
+          emf(i,jop3(i)) = emf(i,jip2(i))
+        else if (mojb(i) .eq. 5) then
+          emf(i,jop2(i)) = term1(i,jo  (i)) + term2(i,jo  (i))
+          emf(i,jop3(i)) = term1(i,jom1(i)) + term2(i,jom1(i))
+        else if (mojb(i) .eq. 6) then
+          emf(i,jop2(i)) = emf(i,jo  (i))
+          emf(i,jop3(i)) = emf(i,jom1(i))
+        endif
+40    continue
+#endif
+      return
+      end
+c
+c------------------   magnetic field in 3-direction   ------------------
+c
+      subroutine bvalb3
+#ifdef MHD
+      implicit NONE
+#include "param.h"
+#include "grid.h"
+#include "field.h"
+#include "bndry.h"
+      integer i,j
+c
+c  inner i boundary
+cdir$ ivdep
+      do 10 j=js,je
+c CHANGED PROGA, Aug. 2 2002 following Stone and Pringle
+c        if (abs(b3iib(j)) .eq. 1) then
+c          b3(iim1(j),j) = float(b3iib(j)) * b3    (ii  (j),j)
+c          b3(iim2(j),j) = float(b3iib(j)) * b3    (iip1(j),j)
+c        else if (b3iib(j) .eq. 2) then
+c          b3(iim1(j),j) = b3    (ii  (j),j)
+c          b3(iim2(j),j) = b3    (iim1(j),j)
+c        else if (b3iib(j) .eq. 3) then
+c          b3(iim1(j),j) = b3iim1(        j)
+c          b3(iim2(j),j) = b3iim2(        j)
+c        else if (b3iib(j) .eq. 4) then
+c          b3(iim1(j),j) = b3    (io  (j),j)
+c          b3(iim2(j),j) = b3    (iom1(j),j)
+c        endif
+        if (b1(is,j) .gt. 0.0) b3(is-1,j) = min(0.0,b3(is,j))
+        if (b1(is,j) .lt. 0.0) b3(is-1,j) = max(0.0,b3(is,j))
+        b3(is-2,j) = b3(is-1,j)
+10    continue
+c
+c  outer i boundary
+cdir$ ivdep
+      do 20 j=js,je
+        if (abs(b3oib(j)) .eq. 1) then
+          b3(iop1(j),j) = float(b3oib(j)) * b3    (io  (j),j)
+          b3(iop2(j),j) = float(b3oib(j)) * b3    (iom1(j),j)
+        else if (b3oib(j) .eq. 2) then
+          b3(iop1(j),j) = b3    (io  (j),j)
+          b3(iop2(j),j) = b3    (iop1(j),j)
+        else if (b3oib(j) .eq. 3) then
+          b3(iop1(j),j) = b3iop1(        j)
+          b3(iop2(j),j) = b3iop2(        j)
+        else if (b3oib(j) .eq. 4) then
+          b3(iop1(j),j) = b3    (ii  (j),j)
+          b3(iop2(j),j) = b3    (iip1(j),j)
+        endif
+20    continue
+c
+c  inner j boundary 
+cdir$ ivdep
+      do 30 i=is-2,ie+2
+        if (abs(b3ijb(i)) .eq. 1) then
+          b3(i,jim1(i)) = float(b3ijb(i)) * b3    (i,ji  (i))
+          b3(i,jim2(i)) = float(b3ijb(i)) * b3    (i,jip1(i))
+        else if (b3ijb(i) .eq. 2) then
+          b3(i,jim1(i)) = b3    (i,ji  (i))
+          b3(i,jim2(i)) = b3    (i,jim1(i))
+        else if (b3ijb(i) .eq. 3) then
+          b3(i,jim1(i)) = b3jim1(i        )
+          b3(i,jim2(i)) = b3jim2(i        )
+        else if (b3ijb(i) .eq. 4) then
+          b3(i,jim1(i)) = b3    (i,jo  (i))
+          b3(i,jim2(i)) = b3    (i,jom1(i))
+        endif
+30    continue
+c
+c  outer j boundary
+cdir$ ivdep
+      do 40 i=is-2,ie+2
+        if (abs(b3ojb(i)) .eq. 1) then
+          b3(i,jop1(i)) = float(b3ojb(i)) * b3    (i,jo  (i))
+          b3(i,jop2(i)) = float(b3ojb(i)) * b3    (i,jom1(i))
+        else if (b3ojb(i) .eq. 2) then
+          b3(i,jop1(i)) = b3    (i,jo  (i))
+          b3(i,jop2(i)) = b3    (i,jop1(i))
+        else if (b3ojb(i) .eq. 3) then
+          b3(i,jop1(i)) = b3jop1(i        )
+          b3(i,jop2(i)) = b3jop2(i        )
+        else if (b3ojb(i) .eq. 4) then
+          b3(i,jop1(i)) = b3    (i,ji  (i))
+          b3(i,jop2(i)) = b3    (i,jip1(i))
+        endif
+40    continue
+#endif
+      return
+      end

@@ -1,0 +1,82 @@
+#include "zeus2d.def"
+c=======================================================================
+c////////////////////////  SUBROUTINE DATAIO  \\\\\\\\\\\\\\\\\\\\\\\\\\
+c
+      subroutine dataio(iswres,iswhdf,iswhst,iswusr)
+c
+c  PURPOSE:  Controls data I/O for restart, HDF, history, and USER
+c  dumps.  The latter is an arbitrary routine the user can add for
+c  problem dependent i/o included using the cpp macroname USERDUMP
+c
+c  INPUT ARGUMENTS: iswres,iswhdf,iswhst=switches for restart,hdf, and
+c    history dumps.  Values of 1 ensure dumps will be made.
+c
+c  OUTPUT ARGUMENTS: none
+c
+c  EXTERNALS: MSAVE, HDFALL, STRTOI, HDUMP, USERDUMP
+c
+c  LOCALS:
+c-----------------------------------------------------------------------
+      implicit NONE
+#include "root.h"
+c-----------------------------------------------------------------------
+      integer iswres,iswhdf,iswhst,iswusr
+      integer incr,strtoi
+      external msave, hdfall, strtoi, printd, USERDUMP
+c\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\/////////////////////////////////
+c=======================================================================
+c
+      if (dtdump .gt. 0.0 .and. tused .ge. (tdump+dtdump)) then
+        tdump = tdump + dtdump
+        iswres = 1
+      endif
+      if (dthdf  .gt. 0.0 .and. time  .ge. (thdf+dthdf)) then
+        thdf = thdf + dthdf
+        iswhdf = 1
+      endif
+      if (dthist .gt. 0.0 .and. time  .ge. (thist+dthist)) then
+        thist = thist + dthist
+        iswhst = 1
+      endif
+      if (dtusr .gt. 0.0 .and. time  .ge. (tusr+dtusr)) then
+        tusr = tusr + dtusr
+        iswusr = 1
+      endif
+c
+c  restart dump
+c
+      if (iswres .eq. 1) then
+        call msave(resfile)
+        incr = strtoi(resfile,4,9) + 1
+        write(resfile,"(a3,i6.6,a8)") 'res',incr,id
+        iswres=0
+      endif
+c
+c  HDF dump
+c
+      if (iswhdf .eq. 1) then
+        call hdfall(hdffile)
+        incr = strtoi(hdffile,4,9) + 1
+        write(hdffile,"(a3,i6.6,a8)") 'hdf',incr,id
+        iswhdf=0
+      endif
+c
+c  history dump
+c
+      if (iswhst .eq. 1) then
+        call printd
+        iswhst=0
+      endif
+c
+c  USER dump
+c
+      if (iswusr .eq. 1) then
+c        call USERDUMP(usrfile)
+        call movie(usrfile)
+        incr = strtoi(usrfile,4,9) + 1
+        write(usrfile,"(a3,i6.6,a8)") 'usr',incr,id
+        iswusr=0
+      endif
+c
+      return
+      end
