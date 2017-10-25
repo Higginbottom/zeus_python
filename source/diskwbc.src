@@ -40,12 +40,17 @@ c	print *,dfloor*d0
        do  i=is,ie
         do  j=is,je
         if (d (i,j).le.1e-22) d(i,j)=1e-22
+		
+c these lines set the temperature floor to the temperature of a thin accretion disk		
 		tfloor=((3.0*ptmass*mdot*guniv)/  (8.0*pi*sb*
      &   (x1b(i)*sin(x2b(j)))**3.0) )**0.25
+c these lines check to see if the accretion disk floor is lower than the 
+c lowest temperature in the loouk tables, and resets accordingly
 	 if (tfloor.lt.lu_temp(1)) then
 		 tfloor=lu_temp(1)
 	 endif
-	 tfloor=1e4
+c this undoes all the work above and sets the floor to something by hand	 
+c	 tfloor=100.
 
 		 if (e(i,j) .le. (3.0*d(i,j)*boltz*tfloor)/(2.0*mp*mu)) then
 			 e(i,j)=(3.0*d(i,j)*boltz*tfloor)/(2.0*mp*mu)

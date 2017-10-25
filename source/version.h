@@ -1,2 +1,2 @@
-#define GIT_COMMIT_HASH "a601d6f7fd4b9575b822ca1705a9e5b4ed3a535c"
+#define GIT_COMMIT_HASH "94dfdda68a3787f76ada631f33c3dc103623ecef"
 #define GIT_BRANCH "master"
