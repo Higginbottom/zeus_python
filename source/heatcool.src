@@ -133,8 +133,10 @@ c     + zfunc(t_l),zfunc(t_u)
 
 c we will call heatcool one last time to compute the heating and cooling rates for the new temperature	
 	
-c		 print *,'Back from zbrent, t=',t_1
-	
+
+	if (i-is.eq.0 .and. j-js.eq.95) then
+		print *,'Back from zbrent, t=',t_1
+	endif
 		 
        tfloor=((3.0*ptmass*mdot*guniv)/  (8.0*pi*sb*
      &   (x1b(i)*sin(x2b(j)))**3.0) )**0.25
@@ -262,7 +264,6 @@ c     + n_lu_xi,log_lu_xi,comp_h_lu,lt,lxi,delta)*ne*nh
 	
 	if (mode.eq.3) then
 		st=sqrt(temp)
-		
 	
 	h_comp(i,j)=comp_h_pre(i,j)*8.9e-36*xi0*tx*ne*nh
 	c_comp(i,j)=comp_c_pre(i,j)*8.9e-36*xi0*(4.0*temp)*ne*nh
@@ -279,6 +280,11 @@ c     + n_lu_xi,log_lu_xi,comp_h_lu,lt,lxi,delta)*ne*nh
 	c_brem(i,j)=l_b
 	c_line(i,j)=l_l
 	
+	
+	if (i-is.eq.0 .and. j-js.eq.95) then
+	print *,"blah",3.3e-27*st,3.3e-27*st*ne*nh,
+     + brem_pre(i,j)*3.3e-27*st*ne*nh,temp
+	endif
 	
 	hc_tot=(gamma_comp+gamma_x-l_b-l_l)
 	
@@ -333,14 +339,24 @@ c     + n_lu_xi,log_lu_xi,comp_h_lu,lt,lxi,delta)*ne*nh
 		  
 		  LOGICAL THERE 
    
-		  real r,theta,c_heat,x_heat,b_heat,l_heat,c_cool,x_cool,py_xi
-          real b_cool,l_cool,n1,py_temp,py_ne,py_vol,ne,nh
-          real comp_c_pre_old,comp_h_pre_old,xray_pre_old,line_pre_old,
+		  REAL r,theta,c_heat,x_heat,b_heat,l_heat,c_cool,x_cool,py_xi
+          REAL b_cool,l_cool,n1,py_temp,py_ne,py_vol
+		  double precision ne,nh
+		  REAL comp_c_old,comp_h_old,xray_old,line_old,brem_old
+          REAL comp_c_pre_old,comp_h_pre_old,xray_pre_old,line_pre_old,
      +     brem_pre_old,ratio,py_rho,py_nh
-	 integer pre_limit,pre_limit_tmp
+	 integer pre_limit,pre_limit_tmp,mode
+	 REAL heatcool,junk,n2
+	 REAL xi0,e_0,hc_0,sqsqxi
+ 	common /hc_data/ xi0,e_0,hc_0,sqsqxi,n2,ir,jt,nh,ne,mode,j_ind
+	 
 	 
 	 pre_limit_tmp=0
 	 pre_limit=0
+	 
+	 
+	 
+	 
 	 
 	 
 	 
@@ -363,31 +379,43 @@ c		  print *,"Got here OK"
 		 print *,"ALARM mismatch between zeus and python file",i,j,
      +d(ir,jt),py_rho,abs((d(ir,jt)-py_rho)/py_rho)
 	endif
-	 
-	 
+   
+				
+	n1=d(ir,jt)/(mu*mp)
+	nh=d(ir,jt)/(1.43*mp)
+	ne=nh*1.21
+				
 
+	comp_c_pre_old=comp_c_pre(ir,jt) 
+	comp_h_pre_old=comp_h_pre(ir,jt)
+	xray_pre_old=xray_pre(ir,jt)
+	line_pre_old=line_pre(ir,jt)
+	brem_pre_old=brem_pre(ir,jt)   
+	
+	comp_c_old=c_comp(ir,jt) 
+	comp_h_old=h_comp(ir,jt)
+	xray_old=h_xray(ir,jt)
+	line_old=c_line(ir,jt)
+	brem_old=c_brem(ir,jt)
+	
+	
+	
+	
+c This is a test - recombute the heating and cooling rates for the temperature that python used!
+
+		xi0=xi(ir,jt)
+		mode=3
+		sqsqxi=sqrt(sqrt(xi0))
+
+	   
+         junk=heatcool(py_temp)  
 		 
-c				print *,i,j,r,theta,x_heat,c_heat,l_heat,b_heat,x_cool,
-c     &   c_cool,l_cool,b_cool,py_xi	   
-				
-				n1=d(ir,jt)/(mu*mp)
-				
-				nh=d(ir,jt)/(1.43*mp)
-				ne=nh*1.21
-				
-c		  print *,hc_xray(i+2,j+3),x_heat/(n1*n1*1.2),x_cool/(n1*n1*1.2),
-c     &   x_heat/(n1*n1*1.2)-x_cool/(n1*n1*1.2)
-c		  do 10 i=is,ie
-c			  do 20 j=js,je
-c		  print *,is,i+2,ie,x1b(i+2)/r,js,j+3,je,x2b(j+3)/
-c     &  (theta)
-				comp_c_pre_old=comp_c_pre(ir,jt) 
-                comp_h_pre_old=comp_h_pre(ir,jt)
-                xray_pre_old=xray_pre(ir,jt)
-                line_pre_old=line_pre(ir,jt)
-                brem_pre_old=brem_pre(ir,jt)      
-                        
-                        
+	   	 if (i.eq.0 .and. j.eq.95) then
+	   	 	print *,c_brem(ir,jt),brem_old
+			endif
+		      
+	 
+               
                         
                         
                          
@@ -395,15 +423,6 @@ c     &  (theta)
      &   ((h_comp(ir,jt))+1d-99)
 		 comp_c_pre(ir,jt)=comp_c_pre(ir,jt)*(c_cool)/
      &   ((c_comp(ir,jt))+1d-99)
-	 
-
-		 
-c	 if (i.eq.1) then
-c	  print *,"COMP test",i,j,comp_c_pre(i+2,j+3),
-c     &   c_comp(i+2,j+3),ne*nh*c_comp(i+2,j+3),c_cool,ne,nh,
-c     &    xi(i+2,j+3),d(i+2,j+3),
-c     &   e(i+2,j+3)*(2.0/3.0)/((d(i+2,j+3)/(mu*mp))*boltz)
-c        endif
 		 xray_pre(ir,jt)=xray_pre(ir,jt)*x_heat/
      &   ((h_xray(ir,jt))+1d-99)
  		 line_pre(ir,jt)=line_pre(ir,jt)*l_cool/
@@ -412,7 +431,9 @@ c        endif
      &   ((c_brem(ir,jt))+1d-99)
 	 
 	 
-	 
+   	 if (i.eq.0 .and. j.eq.95) then
+   	 	print *,b_cool,brem_pre(ir,jt),brem_pre_old,c_brem(ir,jt)
+		endif
 
 	 
 	 

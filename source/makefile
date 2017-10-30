@@ -132,12 +132,12 @@ startup:
 	
 
 
-compile: startup zeus2d.src ${EXEDIR}zeus2d_lu_trunc.exe
+compile: startup zeus2d.src ${EXEDIR}zeus2d_lu_trunc2.exe
 	
 
 zeus2d.src: zeus2d.def
 	touch *.src *.c
 
-${EXEDIR}zeus2d_lu_trunc.exe: ${OBJ}  ${ADDN}
-	${LDR} -o ${EXEDIR}zeus2d_lu_trunc.exe ${OBJ}  ${ADDN} ${LIB}
+${EXEDIR}zeus2d_lu_trunc2.exe: ${OBJ}  ${ADDN}
+	${LDR} -o ${EXEDIR}zeus2d_lu_trunc2.exe ${OBJ}  ${ADDN} ${LIB}
 
