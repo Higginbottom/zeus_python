@@ -281,10 +281,7 @@ c     + n_lu_xi,log_lu_xi,comp_h_lu,lt,lxi,delta)*ne*nh
 	c_line(i,j)=l_l
 	
 	
-	if (i-is.eq.0 .and. j-js.eq.95) then
-	print *,"blah",3.3e-27*st,3.3e-27*st*ne*nh,
-     + brem_pre(i,j)*3.3e-27*st*ne*nh,temp
-	endif
+
 	
 	hc_tot=(gamma_comp+gamma_x-l_b-l_l)
 	
@@ -327,6 +324,7 @@ c     + n_lu_xi,log_lu_xi,comp_h_lu,lt,lxi,delta)*ne*nh
 
 	  
 	  subroutine hc_file_input()
+              implicit none
 #include "cons.h"
 #include "param.h"
 #include "grid.h"
@@ -334,16 +332,16 @@ c     + n_lu_xi,log_lu_xi,comp_h_lu,lt,lxi,delta)*ne*nh
 #include "root.h"
 #include "diskw.h"
 #include "control.h"
-		  integer i,j,ir,jt
+		  integer i,j,ir,jt,j_ind,n
 		  
 		  
 		  LOGICAL THERE 
    
 		  REAL r,theta,c_heat,x_heat,b_heat,l_heat,c_cool,x_cool,py_xi
           REAL b_cool,l_cool,n1,py_temp,py_ne,py_vol
-		  double precision ne,nh
+		  REAL ne,nh
 		  REAL comp_c_old,comp_h_old,xray_old,line_old,brem_old
-          REAL comp_c_pre_old,comp_h_pre_old,xray_pre_old,line_pre_old,
+      REAL comp_c_pre_old,comp_h_pre_old,xray_pre_old,line_pre_old,
      +     brem_pre_old,ratio,py_rho,py_nh
 	 integer pre_limit,pre_limit_tmp,mode
 	 REAL heatcool,junk,n2
@@ -354,14 +352,7 @@ c     + n_lu_xi,log_lu_xi,comp_h_lu,lt,lxi,delta)*ne*nh
 	 pre_limit_tmp=0
 	 pre_limit=0
 	 
-	 
-	 
-	 
-	 
-	 
-	 
-		  
-c		  print *,"Got here OK"
+
          INQUIRE( FILE='py_heatcool.dat', EXIST=THERE ) 
           IF ( THERE ) then
 		 	 open(66,file='py_heatcool.dat',status='old')
@@ -397,9 +388,14 @@ c		  print *,"Got here OK"
 	xray_old=h_xray(ir,jt)
 	line_old=c_line(ir,jt)
 	brem_old=c_brem(ir,jt)
+      
 	
-	
-	
+	 if (i.eq.79 .and. j.eq.99) then
+	 	print *,'1',line_old,c_line(ir,jt),l_cool,line_pre_old,
+     +     line_pre(ir,jt)
+ 	print *,'1',xray_old,h_xray(ir,jt),x_heat,xray_pre_old,
+     +     xray_pre(ir,jt)
+      endif
 	
 c This is a test - recombute the heating and cooling rates for the temperature that python used!
 
@@ -410,9 +406,7 @@ c This is a test - recombute the heating and cooling rates for the temperature t
 	   
          junk=heatcool(py_temp)  
 		 
-	   	 if (i.eq.0 .and. j.eq.95) then
-	   	 	print *,c_brem(ir,jt),brem_old
-			endif
+
 		      
 	 
                
@@ -431,9 +425,12 @@ c This is a test - recombute the heating and cooling rates for the temperature t
      &   ((c_brem(ir,jt))+1d-99)
 	 
 	 
-   	 if (i.eq.0 .and. j.eq.95) then
-   	 	print *,b_cool,brem_pre(ir,jt),brem_pre_old,c_brem(ir,jt)
-		endif
+ 	 if (i.eq.79 .and. j.eq.99) then
+ 	 	print *,'2',line_old,c_line(ir,jt),l_cool,line_pre_old,
+     +   line_pre(ir,jt)
+	print *,'2',xray_old,h_xray(ir,jt),x_heat,xray_pre_old,
+     +     xray_pre(ir,jt)
+	endif
 
 	 
 	 
@@ -529,6 +526,12 @@ c      print *,'BREM_PRE    old=',brem_pre_old,
 c     c' new=',brem_pre(i+2,j+3)  
 	 
 	 
+  	 if (i.eq.79 .and. j.eq.99) then
+  	 	print *,'3',line_old,c_line(ir,jt),l_cool,line_pre_old,
+     +   line_pre(ir,jt)
+ 	print *,'3',xray_old,h_xray(ir,jt),x_heat,xray_pre_old,
+     +     xray_pre(ir,jt)
+ 	endif
      
      
      
@@ -550,7 +553,7 @@ c 20 		continue
 20		print *,"There are ",n," records"	
 		print *,pre_limit," cells had HC prefactor change limited"
 		
-		  close unit=66
+		  close (unit=66)
 	  else
 		  print *,"There is no heatcool file - continuuing normally"
 	  endif
