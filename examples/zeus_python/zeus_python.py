@@ -186,9 +186,9 @@ for i in range(istart,10000):  #The second number is the maximum number of calls
 	
 	subprocess.check_call(cmdline,shell=True)  #Execute the copy from the hdf.....pf to input.pf
 	if py_cycles==3: #This is the first time thruogh - so no restart""
-		cmdline="mpirun -n "+char(nproc)+" "+python_ver+" -z  input.pf > "+hdf_file[2:]+".out"  #We now run python
+		cmdline="mpirun -n "+str(nproc)+" "+python_ver+" -z  input.pf > "+hdf_file[2:]+".out"  #We now run python
 	else:
-		cmdline="mpirun -n "+char(nproc)+" "+python_ver+" -z -r  input.pf > "+hdf_file[2:]+".out"  #We now run python
+		cmdline="mpirun -n "+str(nproc)+" "+python_ver+" -z -r  input.pf > "+hdf_file[2:]+".out"  #We now run python
 			
 	out.write("Running python"+"\n") 
 	out.write(cmdline+"\n")
