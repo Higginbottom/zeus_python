@@ -20,7 +20,7 @@ sdmms.o: sdmms.c tproto.h ../../hdf/src/hdf.h ../../hdf/src/h4config.h \
   /usr/include/sys/_types/_ucontext.h \
   /usr/include/sys/_types/_sigset_t.h /usr/include/sys/_types/_uid_t.h \
   /usr/include/sys/resource.h \
-  /Library/Developer/CommandLineTools/usr/lib/clang/9.0.0/include/stdint.h \
+  /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/9.0.0/include/stdint.h \
   /usr/include/stdint.h /usr/include/sys/_types/_int8_t.h \
   /usr/include/sys/_types/_int16_t.h /usr/include/sys/_types/_int32_t.h \
   /usr/include/sys/_types/_int64_t.h /usr/include/_types/_uint8_t.h \
@@ -38,7 +38,7 @@ sdmms.o: sdmms.c tproto.h ../../hdf/src/hdf.h ../../hdf/src/h4config.h \
   /usr/include/sys/_types/_u_int32_t.h \
   /usr/include/sys/_types/_u_int64_t.h /usr/include/sys/_types/_dev_t.h \
   /usr/include/sys/_types/_mode_t.h \
-  /Library/Developer/CommandLineTools/usr/lib/clang/9.0.0/include/limits.h \
+  /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/9.0.0/include/limits.h \
   /usr/include/limits.h /usr/include/machine/limits.h \
   /usr/include/i386/limits.h /usr/include/i386/_limits.h \
   /usr/include/sys/syslimits.h /usr/include/string.h \
@@ -161,7 +161,7 @@ tproto.h:
 
 /usr/include/sys/resource.h:
 
-/Library/Developer/CommandLineTools/usr/lib/clang/9.0.0/include/stdint.h:
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/9.0.0/include/stdint.h:
 
 /usr/include/stdint.h:
 
@@ -225,7 +225,7 @@ tproto.h:
 
 /usr/include/sys/_types/_mode_t.h:
 
-/Library/Developer/CommandLineTools/usr/lib/clang/9.0.0/include/limits.h:
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/9.0.0/include/limits.h:
 
 /usr/include/limits.h:
 

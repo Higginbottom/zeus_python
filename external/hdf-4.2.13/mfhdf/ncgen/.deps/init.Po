@@ -10,8 +10,8 @@ init.o: init.c /usr/include/stdio.h /usr/include/sys/cdefs.h \
   /usr/include/secure/_stdio.h /usr/include/secure/_common.h ncgen.h \
   ../../mfhdf/libsrc/local_nc.h ../../hdf/src/H4api_adpt.h \
   ../../hdf/src/h4config.h \
-  /Library/Developer/CommandLineTools/usr/lib/clang/9.0.0/include/stddef.h \
-  /Library/Developer/CommandLineTools/usr/lib/clang/9.0.0/include/__stddef_max_align_t.h \
+  /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/9.0.0/include/stddef.h \
+  /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/9.0.0/include/__stddef_max_align_t.h \
   /usr/include/rpc/types.h /usr/include/sys/types.h \
   /usr/include/sys/appleapiopts.h /usr/include/machine/types.h \
   /usr/include/i386/types.h /usr/include/sys/_types/_int8_t.h \
@@ -66,14 +66,14 @@ init.o: init.c /usr/include/stdio.h /usr/include/sys/cdefs.h \
   /usr/include/sys/_types/_sigaltstack.h \
   /usr/include/sys/_types/_ucontext.h \
   /usr/include/sys/_types/_sigset_t.h /usr/include/sys/resource.h \
-  /Library/Developer/CommandLineTools/usr/lib/clang/9.0.0/include/stdint.h \
+  /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/9.0.0/include/stdint.h \
   /usr/include/stdint.h /usr/include/_types/_uint8_t.h \
   /usr/include/_types/_uint16_t.h /usr/include/_types/_uint32_t.h \
   /usr/include/_types/_uint64_t.h /usr/include/_types/_intmax_t.h \
   /usr/include/_types/_uintmax_t.h /usr/include/alloca.h \
   /usr/include/sys/_types/_ct_rune_t.h /usr/include/sys/_types/_rune_t.h \
   /usr/include/sys/_types/_wchar_t.h \
-  /Library/Developer/CommandLineTools/usr/lib/clang/9.0.0/include/limits.h \
+  /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/9.0.0/include/limits.h \
   /usr/include/limits.h /usr/include/machine/limits.h \
   /usr/include/i386/limits.h /usr/include/i386/_limits.h \
   /usr/include/sys/syslimits.h /usr/include/string.h \
@@ -137,9 +137,9 @@ ncgen.h:
 
 ../../hdf/src/h4config.h:
 
-/Library/Developer/CommandLineTools/usr/lib/clang/9.0.0/include/stddef.h:
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/9.0.0/include/stddef.h:
 
-/Library/Developer/CommandLineTools/usr/lib/clang/9.0.0/include/__stddef_max_align_t.h:
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/9.0.0/include/__stddef_max_align_t.h:
 
 /usr/include/rpc/types.h:
 
@@ -307,7 +307,7 @@ ncgen.h:
 
 /usr/include/sys/resource.h:
 
-/Library/Developer/CommandLineTools/usr/lib/clang/9.0.0/include/stdint.h:
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/9.0.0/include/stdint.h:
 
 /usr/include/stdint.h:
 
@@ -331,7 +331,7 @@ ncgen.h:
 
 /usr/include/sys/_types/_wchar_t.h:
 
-/Library/Developer/CommandLineTools/usr/lib/clang/9.0.0/include/limits.h:
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/9.0.0/include/limits.h:
 
 /usr/include/limits.h:
 

@@ -45,7 +45,7 @@ TAR=tar
 SHELL=/bin/sh
 EXE=
 
-prefix =/Users/nickhigginbottom/zeus_python/lib/zlib
+prefix =/Users/nsh2m14/zeus_python/lib/zlib
 exec_prefix =${prefix}
 libdir =${exec_prefix}/lib
 sharedlibdir =${libdir}

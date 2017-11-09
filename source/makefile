@@ -84,25 +84,27 @@ LDR    = gfortran
 UNAME := $(shell uname)
 UNAME1 := $(shell uname -n)
 
+
 GIT_COMMIT_HASH := $(shell expr `git rev-parse HEAD`)
 GIT_BRANCH := $(shell git for-each-ref --format='%(objectname) %(refname:short)' refs/heads | awk "/^$$(git rev-parse HEAD)/ {print \$$2}")
 
 
-
-
 ifeq ($(UNAME1), uos-15962)
-LIB    = /usr/local/lib/libmfhdf.a /usr/local/lib/libdf.a /usr/local/lib/libjpeg.a /usr/local/opt/zlib/lib/libz.a  
-endif
-ifeq ($(UNAME1), nicks-imac.clients.soton.ac.uk)
-LIB    = /usr/local/lib/libmfhdf.a /usr/local/lib/libdf.a /usr/local/lib/libjpeg.a /usr/local/lib/libz.a  
-endif
-ifeq ($(UNAME1), endjinn)
-LIB    = /usr/lib/libmfhdf.a /usr/lib/libdf.a /usr/lib/x86_64-linux-gnu/libjpeg.a /usr/lib/x86_64-linux-gnu/libz.a  
-endif
-ifeq ($(UNAME1), cyan01)
-LIB    =  /local/software/hdf4/4.2.9/gcc/lib/libmfhdf.a /local/software/szip/2.1/lib/libsz.so /local/software/hdf4/4.2.9/gcc/lib/libdf.a /usr/lib64/libjpeg.so /usr/lib64/libz.so
-else
-LIB= ../lib/hdf4/lib/libmfhdf.a ../lib/hdf4/lib/libdf.a ../lib/jpeg/lib/libjpeg.a ../lib/zlib/lib/libz.a
+LIB    = /usr/local/lib/libmfhdf.a /usr/local/lib/libdf.a /usr/local/lib/libjpeg.a /usr/local/opt/zlib/lib/libz.a 
+else 
+	ifeq ($(UNAME1), nicks-imac.clients.soton.ac.uk)
+	LIB    = /usr/local/lib/libmfhdf.a /usr/local/lib/libdf.a /usr/local/lib/libjpeg.a /usr/local/lib/libz.a  
+	else 
+		ifeq ($(UNAME1), endjinn)
+		LIB    = /usr/lib/libmfhdf.a /usr/lib/libdf.a /usr/lib/x86_64-linux-gnu/libjpeg.a /usr/lib/x86_64-linux-gnu/libz.a  
+		else 
+			ifeq ($(UNAME1), cyan01)	
+				LIB    =  /local/software/hdf4/4.2.9/gcc/lib/libmfhdf.a /local/software/szip/2.1/lib/libsz.so /local/software/hdf4/4.2.9/gcc/lib/libdf.a /usr/lib64/libjpeg.so /usr/lib64/libz.so
+			else
+				LIB= ../lib/hdf4/lib/libmfhdf.a ../lib/hdf4/lib/libdf.a ../lib/jpeg/lib/libjpeg.a ../lib/zlib/lib/libz.a
+			endif
+		endif
+	endif	
 endif
 
 
@@ -132,6 +134,7 @@ clean:
 startup:
 	echo "#define GIT_COMMIT_HASH" \"$(GIT_COMMIT_HASH)\" > version.h
 	echo "#define GIT_BRANCH" \"$(GIT_BRANCH)\" >> version.h
+	
 	
 #	zeus2d.src ${EXEDIR}zeus2d_lu_trunc.exe
 	

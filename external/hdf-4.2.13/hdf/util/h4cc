@@ -14,7 +14,7 @@
 ## then modify them accordingly to represent the new paths.               ##
 ##                                                                        ##
 ############################################################################
-prefix="/Users/nickhigginbottom/zeus_python/lib/hdf4"
+prefix="/Users/nsh2m14/zeus_python/lib/hdf4"
 exec_prefix="${prefix}"
 libdir="${exec_prefix}/lib"
 includedir="${prefix}/include"
@@ -45,8 +45,8 @@ SHOW="eval"
 CCBASE="clang"
 CLINKERBASE="clang"
 CFLAGS=" -O0"
-CPPFLAGS=" -I/Users/nickhigginbottom/zeus_python/lib/zlib//include -I/Users/nickhigginbottom/zeus_python/lib/jpeg//include -DBIG_LONGS -DSWAP "
-LDFLAGS=" -L/Users/nickhigginbottom/zeus_python/lib/zlib//lib -L/Users/nickhigginbottom/zeus_python/lib/jpeg//lib"
+CPPFLAGS=" -I/Users/nsh2m14/zeus_python/lib/zlib//include -I/Users/nsh2m14/zeus_python/lib/jpeg//include -DBIG_LONGS -DSWAP "
+LDFLAGS=" -L/Users/nsh2m14/zeus_python/lib/zlib//lib -L/Users/nsh2m14/zeus_python/lib/jpeg//lib"
 LIBS="-ljpeg -lz "
 
 CC="${HDF4_CC:-$CCBASE}"

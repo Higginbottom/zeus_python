@@ -19,7 +19,7 @@ varput.o: varput.c /usr/include/stdio.h /usr/include/sys/cdefs.h \
   /usr/include/sys/_types/_ucontext.h \
   /usr/include/sys/_types/_sigset_t.h /usr/include/sys/_types/_uid_t.h \
   /usr/include/sys/resource.h \
-  /Library/Developer/CommandLineTools/usr/lib/clang/9.0.0/include/stdint.h \
+  /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/9.0.0/include/stdint.h \
   /usr/include/stdint.h /usr/include/sys/_types/_int8_t.h \
   /usr/include/sys/_types/_int16_t.h /usr/include/sys/_types/_int32_t.h \
   /usr/include/sys/_types/_int64_t.h /usr/include/_types/_uint8_t.h \
@@ -40,7 +40,7 @@ varput.o: varput.c /usr/include/stdio.h /usr/include/sys/cdefs.h \
   ../../mfhdf/libsrc/netcdf.h ../../hdf/src/H4api_adpt.h \
   ../../hdf/src/hlimits.h ../../mfhdf/libsrc/hdf2netcdf.h testcdf.h \
   ../../mfhdf/libsrc/mfhdf.h ../../hdf/src/hdf.h ../../hdf/src/hdfi.h \
-  /Library/Developer/CommandLineTools/usr/lib/clang/9.0.0/include/limits.h \
+  /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/9.0.0/include/limits.h \
   /usr/include/limits.h /usr/include/machine/limits.h \
   /usr/include/i386/limits.h /usr/include/i386/_limits.h \
   /usr/include/sys/syslimits.h /usr/include/string.h \
@@ -155,7 +155,7 @@ varput.o: varput.c /usr/include/stdio.h /usr/include/sys/cdefs.h \
 
 /usr/include/sys/resource.h:
 
-/Library/Developer/CommandLineTools/usr/lib/clang/9.0.0/include/stdint.h:
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/9.0.0/include/stdint.h:
 
 /usr/include/stdint.h:
 
@@ -237,7 +237,7 @@ testcdf.h:
 
 ../../hdf/src/hdfi.h:
 
-/Library/Developer/CommandLineTools/usr/lib/clang/9.0.0/include/limits.h:
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/9.0.0/include/limits.h:
 
 /usr/include/limits.h:
 

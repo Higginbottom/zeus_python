@@ -14,7 +14,7 @@
 ## then modify them accordingly to represent the new paths.               ##
 ##                                                                        ##
 ############################################################################
-prefix="/Users/nickhigginbottom/zeus_python/lib/hdf4"
+prefix="/Users/nsh2m14/zeus_python/lib/hdf4"
 exec_prefix="${prefix}"
 libdir="${exec_prefix}/lib"
 includedir="${prefix}/include"
@@ -45,7 +45,7 @@ SHOW="eval"
 F77BASE="gfortran"
 F77LINKERBASE="gfortran"
 FFLAGS=" -O"
-LDFLAGS=" -L/Users/nickhigginbottom/zeus_python/lib/zlib//lib -L/Users/nickhigginbottom/zeus_python/lib/jpeg//lib"
+LDFLAGS=" -L/Users/nsh2m14/zeus_python/lib/zlib//lib -L/Users/nsh2m14/zeus_python/lib/jpeg//lib"
 LIBS="-ljpeg -lz "
 
 F77="${HDF4_F77:-$F77BASE}"
