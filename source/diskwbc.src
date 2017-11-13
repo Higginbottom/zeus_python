@@ -52,9 +52,11 @@ c lowest temperature in the loouk tables, and resets accordingly
 c this undoes all the work above and sets the floor to something by hand	 
 c	 tfloor=100.
 
-		 if (e(i,j) .le. (3.0*d(i,j)*boltz*tfloor)/(2.0*mp*mu)) then
-			 e(i,j)=(3.0*d(i,j)*boltz*tfloor)/(2.0*mp*mu)
-		 endif
+c the next lines are commented out - this means we are not baselining the temperature
+
+c		 if (e(i,j) .le. (3.0*d(i,j)*boltz*tfloor)/(2.0*mp*mu)) then
+c			 e(i,j)=(3.0*d(i,j)*boltz*tfloor)/(2.0*mp*mu)
+c		 endif
         enddo 
        enddo 
 
