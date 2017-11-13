@@ -59,10 +59,10 @@ c	 tfloor=100.
        enddo 
 
        do  i=is,ie
-c		   if (x1b(i).lt.2.*48.246764e10) then
+		   if (x1b(i).lt.2.*48.246764e10) then
         d(i,je)=djop1(i)  
 		
-c			endif
+			endif
         v1(i,je)=0.0
         v3(i,je)=v3jop1(i)
 c         if (e(i,je).le.ejop1(i)) e(i,je)=ejop1(i) 
