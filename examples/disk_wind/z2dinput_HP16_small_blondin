@@ -1,0 +1,17 @@
+&rescon  irestart=0,resfile='res0285nsh_dw33',dtdump=72000.0,id='nsh_dw33' /
+&pcon nlim=10000000, tlim=300000.0 /
+&hycon qcon=2.0,courno=0.5 /
+&ggen1 nbl=80,x1min=2.4123382003e10,x1max=96.4935280142e10 ,igrid=1,x1rat=1.02,lgrid=.true.  /
+&ggen2 nbl=100,x2min=0.0,x2max=1.5707964,igrid=1,x2rat=0.95,lgrid=.true.  /
+&iib niib=205*1, miib=205*1  /
+&oib noib=205*2, moib=205*2  /
+&ijb nijb=205*-1,mijb=205*-1 /
+&ojb nojb=205*1,mojb=205*1  /
+&grvcon ptmass=13.9e33  /
+&radcon /
+&eqos gamma=1.66666 /
+&pgen d0=2.75e-12,v10=0.,v20=0.,v30=0.,dindex=2.0,mdot=4.4e17,tx=5.6e7, lx=3.3e37, mu=0.6/
+&hc_pre comp_pre0=1.0,line_pre0=1.0,brem_pre0=1.0,xray_pre0=1.0 /
+&py_hydro den_tol=0.5,nden=1.1,hc_lim=0.9 /
+&gcon /
+&iocon dthist=1.0,dtusr=-1,dthdf=10000.0 /
