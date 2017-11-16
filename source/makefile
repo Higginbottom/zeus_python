@@ -136,16 +136,16 @@ startup:
 	echo "#define GIT_BRANCH" \"$(GIT_BRANCH)\" >> version.h
 	
 	
-#	zeus2d.src ${EXEDIR}zeus2d_lu_trunc.exe
+#	zeus2d.src ${EXEDIR}zeus2d_15_nov.exe
 	
 
 
-compile: startup zeus2d.src ${EXEDIR}zeus2d_lu_trunc.exe
+compile: startup zeus2d.src ${EXEDIR}zeus2d_15_nov.exe
 	
 
 zeus2d.src: zeus2d.def
 	touch *.src *.c
 
-${EXEDIR}zeus2d_lu_trunc.exe: ${OBJ}  ${ADDN}
-	${LDR} -o ${EXEDIR}zeus2d_lu_trunc.exe ${OBJ}  ${ADDN} ${LIB}
+${EXEDIR}zeus2d_15_nov.exe: ${OBJ}  ${ADDN}
+	${LDR} -o ${EXEDIR}zeus2d_15_nov.exe ${OBJ}  ${ADDN} ${LIB}
 
