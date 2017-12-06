@@ -267,7 +267,15 @@ c     + n_lu_xi,log_lu_xi,comp_h_lu,lt,lxi,delta)*ne*nh
 	
 	h_xray(i,j)=xray_pre(i,j)*1.5e-21*(sqsqxi/st)*(1-(temp/tx))*ne*nh
 	
-	l_l=line_pre(i,j)*(1.7e-18*exp(-1.3e5/temp)/(xi0*st)+1e-24)*ne*nh
+c	l_l=line_pre(i,j)*(1.7e-18*exp(-1.3e5/temp)/(xi0*st)+1e-24)*ne*nh
+
+	l_l=1.0e-16*exp(-1.3e5/temp)/(sqrt(xi0)*temp)
+	l_l=l_l+min(5e-25*st,1.5e-17/temp,1e-24)
+	l_l=l_l*line_pre(i,j)*ne*nh
+	
+	
+	
+
 	
 	l_b=brem_pre(i,j)*3.3e-27*st*ne*nh
 	
