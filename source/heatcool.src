@@ -327,6 +327,8 @@ c	l_l=line_pre(i,j)*(1.7e-18*exp(-1.3e5/temp)/(xi0*st)+1e-24)*ne*nh
 
 	  
 	  subroutine hc_file_input()
+  	  	use interpolation
+              
               implicit none
 #include "cons.h"
 #include "param.h"
@@ -334,6 +336,7 @@ c	l_l=line_pre(i,j)*(1.7e-18*exp(-1.3e5/temp)/(xi0*st)+1e-24)*ne*nh
 #include "field.h"
 #include "root.h"
 #include "diskw.h"
+#include "zeus_python.h"
 #include "control.h"
 		  integer i,j,ir,jt,j_ind,n
 		  
@@ -400,8 +403,21 @@ c	l_l=line_pre(i,j)*(1.7e-18*exp(-1.3e5/temp)/(xi0*st)+1e-24)*ne*nh
 c This is a test - recompute the heating and cooling rates for the temperature that python used!
 
 		xi0=xi(ir,jt)
-		mode=3
 		sqsqxi=sqrt(sqrt(xi0))
+            
+            
+c set hc_mode to 3 - this is default, blondin	
+      	mode=3 
+c if we have split heatcool files, then use these - mode 1
+      	if (split_heatcool) then
+      		j_ind=binarysearch(n_lu_xi, lu_xi, xi0)
+      	      mode=1
+      	  endif
+c if we have individial heatcool files for each mechanism - mode
+      	  if (indiv_heatcool) then
+            	j_ind=binarysearch(n_lu_xi, lu_xi, xi0)
+            	mode=2
+            endif
 
 	   
          junk=heatcool(py_temp)  
