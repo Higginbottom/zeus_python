@@ -244,11 +244,11 @@ c     + heatcool
      + 10**interpolate(n_lu_temp,log_lu_temp,n_lu_xi,
      + log_lu_xi,xray_h_lu,lt,lxi,delta,'done',i_ind,j_ind)
 	 
-	 heat_tot(i,j)=(h_comp(i,j)+h_xray(i,j))*ne*nh
+	 heat_tot(i,j)=(h_comp(i,j)*ne+h_xray(i,j)*nh)*nh
 	 cool_tot(i,j)=(c_line(i,j)-c_brem(i,j)-c_comp(i,j))*ne*nh
 	 
-	 hc_tot=(h_comp(i,j)+h_xray(i,j)-c_line(i,j)-c_brem(i,j)-
-     +  c_comp(i,j))*ne*nh
+	 hc_tot=(h_comp(i,j)*ne+h_xray(i,j)*nh-c_line(i,j)*ne-
+     +c_brem(i,j)*ne-c_comp(i,j)*ne)*nh
 	  
 	 heatcool=hc_tot
 c 	print *,lxi,lt,hc_tot,h_comp(i,j),interpolate(n_lu_temp,
@@ -286,9 +286,9 @@ c	l_l=line_pre(i,j)*(1.7e-18*exp(-1.3e5/temp)/(xi0*st)+1e-24)*ne*nh
 	c_line(i,j)=l_l
 	
 	
-	hc_tot=(gamma_comp+gamma_x-l_b-l_l)*ne*nh
+	hc_tot=(gamma_comp*ne+gamma_x*nh-l_b*ne-l_l*ne)*nh
 	
-	heat_tot(i,j)=(h_comp(i,j)+h_xray(i,j))*ne*nh
+	heat_tot(i,j)=(h_comp(i,j)*ne+h_xray(i,j)*nh)*nh
 	cool_tot(i,j)=(c_line(i,j)-c_brem(i,j)-c_comp(i,j))*ne*nh
 	
 	
@@ -376,7 +376,7 @@ c	l_l=line_pre(i,j)*(1.7e-18*exp(-1.3e5/temp)/(xi0*st)+1e-24)*ne*nh
 	 
 	 c_heat=c_heat/py_nh/py_ne
 	 c_cool=c_cool/py_nh/py_ne
-	 x_heat=x_heat/py_nh/py_ne
+	 x_heat=x_heat/py_nh/py_nh
 	 l_cool=l_cool/py_nh/py_ne
 	 b_cool=b_cool/py_nh/py_ne
 	 
