@@ -18,7 +18,7 @@
 	REAL 	e_01,t_01,sqsqxi1
 	INTEGER i1,j1,i,j,hc_mode,xi_ind,code
 	double precision t_l,t_u,tol,nh1,ne1,tfloor
-	REAL heatcool,zbrent,zfunc,n1
+	REAL heatcool,zbrent,zfunc,n1,ne_rat
 	REAL test,hc_test
 	common /hc_data/ xi1,e_01,hc_01,sqsqxi1,n1,i1,j1,nh1,ne1,hc_mode,
      + xi_ind
@@ -59,9 +59,9 @@ c   n1 is the particle density (including electrons)
 	n1=rho/(mu*mp)
 c   nh1 is the hydrogen density (based upon solar abundances)	
 	nh1=rho/(1.43*mp)
-c   ne1 is the electron density 	
-	ne1=nh1*1.21
-
+c   ne1 is the electron density 
+c	ne1=nh1*1.21
+	ne1=nh1*ne_rat(t_01,xi1)
 
 c stage one, bracket to find out where the zero point is
 
@@ -180,11 +180,11 @@ c	call exit()
 c	  REAL interpolate
       REAL    div1,div2,divv,del,pnew,pav,xi0,temp,hc_tot,rho,e_0,t_0
       REAL    gamma_comp,gamma_x,l_b,l_l,hc_0,sqsqxi,st,n,nh,ne,delta
-	  REAL     lxi,lt,heat,cool
+	  REAL     lxi,lt,heat,cool,ne_rat
 	  integer   i_ind,j_ind
 	common /hc_data/ xi0,e_0,hc_0,sqsqxi,n,i,j,nh,ne,mode,j_ind
 
-
+      ne=nh*ne_rat(temp,xi0)
 
 	if (mode.eq.0) then
 	i_ind=binarysearch(n_lu_temp, lu_temp, temp)	
@@ -230,25 +230,25 @@ c     + heatcool
 
 	c_line(i,j)=line_pre(i,j)*
      + 10**interpolate(n_lu_temp,log_lu_temp,n_lu_xi,
-     + log_lu_xi,line_c_lu,lt,lxi,delta,'done',i_ind,j_ind)*ne*nh
+     + log_lu_xi,line_c_lu,lt,lxi,delta,'done',i_ind,j_ind)
 	c_comp(i,j)=comp_c_pre(i,j)*
      + 10**interpolate(n_lu_temp,log_lu_temp,n_lu_xi,
-     + log_lu_xi,comp_c_lu,lt,lxi,delta,'done',i_ind,j_ind)*ne*nh
+     + log_lu_xi,comp_c_lu,lt,lxi,delta,'done',i_ind,j_ind)
 	h_comp(i,j)=comp_h_pre(i,j)*
      + 10**interpolate(n_lu_temp,log_lu_temp,n_lu_xi,
-     + log_lu_xi,comp_h_lu,lt,lxi,delta,'done',i_ind,j_ind)*ne*nh
+     + log_lu_xi,comp_h_lu,lt,lxi,delta,'done',i_ind,j_ind)
 	c_brem(i,j)=brem_pre(i,j)*
      + 10**interpolate(n_lu_temp,log_lu_temp,n_lu_xi,
-     + log_lu_xi,brem_c_lu,lt,lxi,delta,'done',i_ind,j_ind)*ne*nh
+     + log_lu_xi,brem_c_lu,lt,lxi,delta,'done',i_ind,j_ind)
 	h_xray(i,j)=xray_pre(i,j)*
      + 10**interpolate(n_lu_temp,log_lu_temp,n_lu_xi,
-     + log_lu_xi,xray_h_lu,lt,lxi,delta,'done',i_ind,j_ind)*ne*nh
+     + log_lu_xi,xray_h_lu,lt,lxi,delta,'done',i_ind,j_ind)
 	 
-	 heat_tot(i,j)=h_comp(i,j)+h_xray(i,j)
-	 cool_tot(i,j)=c_line(i,j)-c_brem(i,j)-c_comp(i,j)
+	 heat_tot(i,j)=(h_comp(i,j)+h_xray(i,j))*ne*nh
+	 cool_tot(i,j)=(c_line(i,j)-c_brem(i,j)-c_comp(i,j))*ne*nh
 	 
-	 hc_tot=h_comp(i,j)+h_xray(i,j)-c_line(i,j)-c_brem(i,j)-
-     +  c_comp(i,j)
+	 hc_tot=(h_comp(i,j)+h_xray(i,j)-c_line(i,j)-c_brem(i,j)-
+     +  c_comp(i,j))*ne*nh
 	  
 	 heatcool=hc_tot
 c 	print *,lxi,lt,hc_tot,h_comp(i,j),interpolate(n_lu_temp,
@@ -262,22 +262,22 @@ c     + n_lu_xi,log_lu_xi,comp_h_lu,lt,lxi,delta)*ne*nh
 	if (mode.eq.3) then
 		st=sqrt(temp)
 	
-	h_comp(i,j)=comp_h_pre(i,j)*8.9e-36*xi0*tx*ne*nh
-	c_comp(i,j)=comp_c_pre(i,j)*8.9e-36*xi0*(4.0*temp)*ne*nh
+	h_comp(i,j)=comp_h_pre(i,j)*8.9e-36*xi0*tx
+	c_comp(i,j)=comp_c_pre(i,j)*8.9e-36*xi0*(4.0*temp)
 	
-	h_xray(i,j)=xray_pre(i,j)*1.5e-21*(sqsqxi/st)*(1-(temp/tx))*ne*nh
+	h_xray(i,j)=xray_pre(i,j)*1.5e-21*(sqsqxi/st)*(1-(temp/tx))
 	
 c	l_l=line_pre(i,j)*(1.7e-18*exp(-1.3e5/temp)/(xi0*st)+1e-24)*ne*nh
 
 	l_l=1.0e-16*exp(-1.3e5/temp)/(sqrt(xi0)*temp)
 	l_l=l_l+min(5e-27*st,1.5e-17/temp,1e-24)
-	l_l=l_l*line_pre(i,j)*ne*nh
+	l_l=l_l*line_pre(i,j)
 	
 	
 	
 
 	
-	l_b=brem_pre(i,j)*3.3e-27*st*ne*nh
+	l_b=brem_pre(i,j)*3.3e-27*st
 	
 	
 	gamma_comp=h_comp(i,j)-c_comp(i,j)
@@ -286,10 +286,10 @@ c	l_l=line_pre(i,j)*(1.7e-18*exp(-1.3e5/temp)/(xi0*st)+1e-24)*ne*nh
 	c_line(i,j)=l_l
 	
 	
-	hc_tot=(gamma_comp+gamma_x-l_b-l_l)
+	hc_tot=(gamma_comp+gamma_x-l_b-l_l)*ne*nh
 	
-	heat_tot(i,j)=h_comp(i,j)+h_xray(i,j)
-	cool_tot(i,j)=c_line(i,j)-c_brem(i,j)-c_comp(i,j)
+	heat_tot(i,j)=(h_comp(i,j)+h_xray(i,j))*ne*nh
+	cool_tot(i,j)=(c_line(i,j)-c_brem(i,j)-c_comp(i,j))*ne*nh
 	
 	
 	heatcool=hc_tot
@@ -350,7 +350,7 @@ c	l_l=line_pre(i,j)*(1.7e-18*exp(-1.3e5/temp)/(xi0*st)+1e-24)*ne*nh
       REAL comp_c_pre_old,comp_h_pre_old,xray_pre_old,line_pre_old,
      +     brem_pre_old,ratio,py_rho,py_nh
 	 integer pre_limit,pre_limit_tmp,mode
-	 REAL heatcool,junk,n2
+	 REAL heatcool,junk,n2,ne_rat
 	 REAL xi0,e_0,hc_0,sqsqxi
  	common /hc_data/ xi0,e_0,hc_0,sqsqxi,n2,ir,jt,nh,ne,mode,j_ind
 	 
@@ -373,6 +373,18 @@ c	l_l=line_pre(i,j)*(1.7e-18*exp(-1.3e5/temp)/(xi0*st)+1e-24)*ne*nh
      &			x_heat,c_heat,l_heat,
      &   b_heat,c_cool,l_cool,b_cool,py_rho,py_nh
 	 
+	 
+	 c_heat=c_heat/py_nh/py_ne
+	 c_cool=c_cool/py_nh/py_ne
+	 x_heat=x_heat/py_nh/py_ne
+	 l_cool=l_cool/py_nh/py_ne
+	 b_cool=b_cool/py_nh/py_ne
+	 
+	 
+	 
+	 
+	 
+	 
 	 ir=i+is 
 	 jt=j+js
 	 
@@ -385,6 +397,8 @@ c	l_l=line_pre(i,j)*(1.7e-18*exp(-1.3e5/temp)/(xi0*st)+1e-24)*ne*nh
 	n1=d(ir,jt)/(mu*mp)
 	nh=d(ir,jt)/(1.43*mp)
 	ne=nh*1.21
+	
+	ne=nh*ne_rat(py_temp,xi0)
 				
 
 	comp_c_pre_old=comp_c_pre(ir,jt) 
@@ -523,6 +537,22 @@ c - call heatcool again to update the heating and cooling rates
 		  
 		  RETURN
 	  END
+	  
+	  
+	  
+	double precision function ne_rat(temp,xi)
+	implicit NONE
+	REAL temp,xi,x1,x2
+
+	x1=10**(-51.59417133+12.27740153*log10(temp))
+	x2=10**(-3.80749689+0.86092628*log10(temp))
+	
+	ne_rat=min(x1,x2,1.21)
+	
+	end function ne_rat
+	
+	
+	 
 
 
 
