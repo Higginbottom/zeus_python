@@ -51,7 +51,9 @@ c lowest temperature in the loouk tables, and resets accordingly
 	 endif
 c this undoes all the work above and sets the floor to something by hand	 
 c	 tfloor=100.
-
+       
+c      The lines below actually apply the temperature floor
+       
 c		 if (e(i,j) .le. (3.0*d(i,j)*boltz*tfloor)/(2.0*mp*mu)) then
 c			 e(i,j)=(3.0*d(i,j)*boltz*tfloor)/(2.0*mp*mu)
 c		 endif
