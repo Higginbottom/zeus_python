@@ -51,16 +51,17 @@ c lowest temperature in the loouk tables, and resets accordingly
 	 endif
 c this undoes all the work above and sets the floor to something by hand	 
 c	 tfloor=100.
-
-		 if (e(i,j) .le. (3.0*d(i,j)*boltz*tfloor)/(2.0*mp*mu)) then
-			 e(i,j)=(3.0*d(i,j)*boltz*tfloor)/(2.0*mp*mu)
-		 endif
+       
+c      The lines below actually apply the temperature floor
+       
+c		 if (e(i,j) .le. (3.0*d(i,j)*boltz*tfloor)/(2.0*mp*mu)) then
+c			 e(i,j)=(3.0*d(i,j)*boltz*tfloor)/(2.0*mp*mu)
+c		 endif
         enddo 
        enddo 
 
-c reset the density to the lower boundary condition, unless it is outside 2ric
        do  i=is,ie
-		   if (x1b(i).lt.2.*48.246764e10) then  
+		   if (x1b(i).lt.2.*48.246764e10) then
         d(i,je)=djop1(i)  
 		
 			endif
