@@ -138,12 +138,12 @@ c				  print *,js,je,ii(j),io(j)
 c				  print *,"initial e=",epv,e(i,j),del,dt,div1,div2,
 c    + d(i,j),x1b(i),x2b(j),v2(i,j)
 c			  endif
-	      call hc_sub(d(i,j),xi(i,j),epv,e1,i,j)
+c	      call hc_sub(d(i,j),xi(i,j),epv,e1,i,j)
 c		  print *,"returned e1=",e1
 c		the new energy in the cell is the returned energy 
-		e(i,j)=e1
+c		e(i,j)=e1
 
-        temp=e(i,j)*(2.0/3.0)/((d(i,j)/(mu*mp))*boltz)
+c        temp=e(i,j)*(2.0/3.0)/((d(i,j)/(mu*mp))*boltz)
 		
 #ifdef PYHYDRO
 				if (abs(d(i,j)-d_init(i,j))/d_init(i,j) .gt. den_tol) then
