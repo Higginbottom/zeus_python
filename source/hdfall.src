@@ -85,6 +85,7 @@ c
       do 111 j=js,je
         do 101 i=is,ie
           data((j-js)*nx1z + i -is+1) = real(xi(i,j))
+		  print *,xi(i,j)
 101     continue
 111   continue
       write(string,"('XI AT TIME=',1pe14.6,'        ')") time

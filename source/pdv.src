@@ -71,27 +71,9 @@ c
 	
           do 40 j=js,je
             do 30 i=ii(j),io(j)
-c		print *,lx,d(i,j),mu,mp,x1b(i)
 				n_h=d(i,j)/(mp*1.43)
 c   This next line computes the ionization parameter  - rho/1.43mp is the hydrogen number density.	
-			if (kappa_x .gt. 0) then	
-				col=(x1b(ii(j))-x1a(ii(j)))*d(ii(j),j)				
-				do 41 i2=ii(j)+1,i
-					col=col+(x1a(i2)-x1b(i2-1))*d(i2-1,j)
-					col=col+(x1b(i2)-x1a(i2))*d(i2,j)
-41				continue
-c		tau_x(i,j)=col*kappa_x
-		
-		f_star=lx/4.0/pi/x1b(i)/x1b(i)
-		f_x=f_star*exp(-1.0*col*kappa_x)
-		xi(i,j)=4.*pi*f_x/n_h
-		
-		  else
-c			  tau_x(i,j)=0.0
-			  xi(i,j)=(lx/(n_h*x1b(i)**2))		  
-		  endif
-		  
-c		print *,i,j,col,kappa_x,tau_x(i,j)
+		xi(i,j)=(lx/(n_h*x1b(i)**2))		  
 		  
 				
 c    We calculate the divergence of the velocity field in this cell, to permit the adiabatic heating or cooling to be computed
@@ -101,20 +83,6 @@ c    We calculate the divergence of the velocity field in this cell, to permit t
      &             -  g32a(j  )*v2(i,j  ))/(g2b(i)*dvl2a(j))
               divv1(i,j) = div1 + div2
 			  
-c			  if (i.eq.4 .and. j.eq.97) then
-c				  print *,j-1,j,j+1,j+2
-c	print *,"div2 ",i-1,v2(i-1,j-1),v2(i-1,j),v2(i-1,j+1),v2(i-1,j+2)
-c	print *,"div2 ",i,v2(i,j-1),v2(i,j  ),v2(i,j+1  ),v2(i,j+2  )
-c	 print *,"div2 ",i+1,v2(i+1,j-1),v2(i+1,j),v2(i+1,j+1),v2(i+1,j+2)
-c	 print *,"div2 ",i+2,v2(i+2,j-1),v2(i+2,j),v2(i+2,j+1),v2(i+2,j+2)
-c	 print *,"div2 ",i+3,v2(i+3,j-1),v2(i+3,j),v2(i+3,j+1),v2(i+3,j+2)
-
-
-c 	print *,"d ",i-1,d(i-1,j-1),d(i-1,j),d(i-1,j+1),d(i-1,j+2)
-c	print *,"d ",i,d(i,j-1),d(i,j  ),d(i,j+1  ),d(i,j+2  )
-c	 print *,"d ",i+1,d(i+1,j-1),d(i+1,j),d(i+1,j+1),d(i+1,j+2)
-c	 print *,"d ",i+2,d(i+2,j-1),d(i+2,j),d(i+2,j+1),d(i+2,j+2)
-c	 print *,"d ",i+3,d(i+3,j-1),d(i+3,j),d(i+3,j+1),d(i+3,j+2)
 
 
 c		  	endif
@@ -123,7 +91,6 @@ c     Just a couple of lines to store the velocities used to compute the diverge
 			  v2_pdv(i,j)=v2(i,j)
  
               del = 0.5*dt*(gamma-1.0)*divv1(i,j)
-c	      print *,hc_tot,(1.0 - del)/(1.0 + del)*e(i,j)-e(i,j)
 c   this computes the new energy, based upon adiabatic effects			  
               epv = (1.0 - del)/(1.0 + del)*e(i,j)
 c    we store it so we can output it for diagnostic purposes			  
@@ -133,17 +100,12 @@ c    and we also storethe adiabatic heating/cooling rates
 
 			  
 c		we now send the current energy, density, and ionization parameter to hc_sub, which will compute the radiative heating/cooling
-c			  if (i.eq.4 .and. j.eq.97) then
-c				  print *,js,je,ii(j),io(j)
-c				  print *,"initial e=",epv,e(i,j),del,dt,div1,div2,
-c    + d(i,j),x1b(i),x2b(j),v2(i,j)
-c			  endif
-c	      call hc_sub(d(i,j),xi(i,j),epv,e1,i,j)
+	      call hc_sub(d(i,j),xi(i,j),epv,e1,i,j)
 c		  print *,"returned e1=",e1
 c		the new energy in the cell is the returned energy 
-c		e(i,j)=e1
+		e(i,j)=e1
 
-c        temp=e(i,j)*(2.0/3.0)/((d(i,j)/(mu*mp))*boltz)
+        temp=e(i,j)*(2.0/3.0)/((d(i,j)/(mu*mp))*boltz)
 		
 #ifdef PYHYDRO
 				if (abs(d(i,j)-d_init(i,j))/d_init(i,j) .gt. den_tol) then
