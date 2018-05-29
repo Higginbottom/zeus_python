@@ -129,6 +129,10 @@ c	 d_old(i,j)=d(i,j)
 		d(i,j)=1e-22
 		temp=tx/4.0
 	endif
+	
+c   This next line computes the ionization parameter  - rho/1.43mp is the hydrogen number density.	
+		xi(i,j)=(lx/((d(i,j)/(mp*1.43))*x1b(i)**2))
+	
          e(i,j)=(3.0*d(i,j)*boltz*temp)/(2.0*mp*mu)
       	t_old(i,j)=temp
 	     

@@ -20,32 +20,15 @@
 	double precision t_l,t_u,tol,nh1,ne1,tfloor
 	REAL heatcool,zbrent,zfunc,n1,ne_rat
 	REAL test,hc_test
-	common /hc_data/ xi1,e_01,hc_01,sqsqxi1,n1,i1,j1,nh1,ne1,hc_mode,
-     + xi_ind
+	common /hc_data/ xi1,e_01,hc_01,sqsqxi1,n1,i1,j1,nh1,ne1
 	external zfunc
 	
 	
-	
-c	print *,comp_c_lu(10,10),comp_h_lu(10,10),xray_h_lu(10,10)
-c     + ,line_c_lu(10,10),brem_c_lu(10,10),comp_h_lu(10,10)-
-c     +  comp_c_lu(10,10)+xray_h_lu(10,10)
-c     + -line_c_lu(10,10)-brem_c_lu(10,10),hc_lu(10,10)
-c	print *,"BLAH3",hc_lu(10,10),comp_c_lu(10,10)
-	
-c	print *,xi0/1e14
 c   first calculate the current temperature of the cell	
 	if (xi0.lt.1e-20) then
 		t_1=1e4
 	else
-		
-		
-		
-		
-	t_01=e_0*(2.0/3.0)/((rho/(mu*mp))*boltz)
-c	if (i.eq.4 .and. j.eq.96) then
-c		print *,"t=",t_01
-c	endif
-	
+		t_01=e_0*(2.0/3.0)/((rho/(mu*mp))*boltz)
 	
 	xi1=xi0
 	i1=i
@@ -60,33 +43,17 @@ c   n1 is the particle density (including electrons)
 c   nh1 is the hydrogen density (based upon solar abundances)	
 	nh1=rho/(1.43*mp)
 c   ne1 is the electron density 
-c	ne1=nh1*1.21
-	ne1=nh1*ne_rat(t_01,xi1)
+	ne1=nh1*1.21
 
 c stage one, bracket to find out where the zero point is
 
 c the ionization parameter doesnt change so we only need
 c to bracket it once. We also set the correct mode here.
-
-
-c set hc_mode to 3 - this is default, blondin	
-	hc_mode=3 
-c if we have split heatcool files, then use these - mode 1
-	if (split_heatcool) then
-		xi_ind=binarysearch(n_lu_xi, lu_xi, xi1)
-	      hc_mode=1
-	  endif
-c if we have individial heatcool files for each mechanism - mode
-	  if (indiv_heatcool) then
-      	xi_ind=binarysearch(n_lu_xi, lu_xi, xi1)
-      	hc_mode=2
-      endif
-	  
 	  
 	
 c we use the heating rate at the   originaltemperature a lot,
 c lets compute it first		
-c	print *,"Computing the initial heating/cooling"
+
 	hc_01=heatcool(t_01)
 
 c   the next few lines bracket the solution temperature
@@ -96,27 +63,13 @@ c	print *,"Bracketing temp=",t_01,i,j,rho,e_0
 	test=zfunc(t_l)*zfunc(t_u)
 	tol=1.0
 	
-
-c	if (test.gt.0) then
-c		print *,"PANIC"
-c	endif
-c	print *,"New run"
-	  do while (test > 0)
+	 do while (test > 0)
 		t_l=t_l*0.9
-		if (t_l.lt.lu_temp(1)) then
-			print *,"Extrapolating to lower T in cell ",i,j,
-     + "T=",t_l 
-		endif
 		t_u=t_u*1.1
-    		test=zfunc(t_l)*zfunc(t_u)
-			
-			
-			
-  	end do
+    	test=zfunc(t_l)*zfunc(t_u)
+	end do
 
-c	if (i .eq.43 .and. j.eq.8) then
-c		print *,d(i,j),t_l,t_u
-c	endif
+
 c now we have worked out a bracket, find the correct value of new temperature
 c we search for the zero point of the equation e_old - e_old - dt(de(t(1/2)))	
 c	print *,"XXXXXX calling zbrent",i,j,xi1,xi_ind,t_l,t_u,
@@ -138,26 +91,13 @@ c we will call heatcool one last time to compute the heating and cooling rates f
        tfloor=((3.0*ptmass*mdot*guniv)/  (8.0*pi*sb*
      &   (x1b(i)*sin(x2b(j)))**3.0) )**0.25
 	  
-c	  if (t_1.lt.tfloor) then
-c	 print *,"temperature returned from cell",i,j," too low=",t_1
-c	  t_1=tfloor
-c      endif
-c  And we finally call heatcool one last time to get the final heating and cooling rates	
-c	  print *,"Finialised, calling one last time"
-	hc_01=heatcool(t_1)
-	
-	if (indiv_heatcool) then
-		hc_mode=2
-		hc_test=heatcool(t_1)
-	endif
 
-c	print *,hc_test,hc_01
+	hc_01=heatcool(t_1)
 
 
 
 c now we have a new temperature, we will return the new internal energy. 
 	e_1=t_1*1.5*n1*boltz
-c	call exit()
 	endif
 
 
@@ -182,96 +122,20 @@ c	  REAL interpolate
       REAL    gamma_comp,gamma_x,l_b,l_l,hc_0,sqsqxi,st,n,nh,ne,delta
 	  REAL     lxi,lt,heat,cool,ne_rat
 	  integer   i_ind,j_ind
-	common /hc_data/ xi0,e_0,hc_0,sqsqxi,n,i,j,nh,ne,mode,j_ind
+	common /hc_data/ xi0,e_0,hc_0,sqsqxi,n,i,j,nh,ne
 
-      ne=nh*ne_rat(temp,xi0)
-
-	if (mode.eq.0) then
-	i_ind=binarysearch(n_lu_temp, lu_temp, temp)	
-
-	hc_tot=interpolate(n_lu_temp,lu_temp,n_lu_xi,lu_xi,hc_lu,temp,
-     + xi0,delta,'done',i_ind,j_ind)
- 	heatcool=hc_tot*ne*nh
-
-	endif
+      ne=nh*1.21
 	
-c	print *,10**lxi,10**lt,heatcool,hc_tot
-	if (mode.eq.1) then
-		i_ind=binarysearch(n_lu_temp, lu_temp, temp)	
-		
-		lxi=log10(xi0)
-		lt=log10(temp)
-
-
-	heat_tot(i,j)=10**interpolate(n_lu_temp,log_lu_temp,n_lu_xi,
-     + log_lu_xi,heat_lu,lt,lxi,delta,'done',i_ind,j_ind)
- 	cool_tot(i,j)=10**interpolate(n_lu_temp,log_lu_temp,n_lu_xi,
-     + log_lu_xi,cool_lu,lt,lxi,delta,'done',i_ind,j_ind)
-	 
- 	
-	 
- 	heatcool=(heat_tot(i,j)-cool_tot(i,j))*ne*nh
-c 	print *,"after temp search",temp,i_ind,xi0,j_ind,heat,cool,
-c     + heatcool
-
-
-	endif
-	
-
-	
-	if (mode.eq.2 .and. indiv_heatcool) then
-		lxi=log10(xi0)
-		lt=log10(temp)
-		
-		i_ind=binarysearch(n_lu_temp, lu_temp, temp)	
-		
-		
-
-
-	c_line(i,j)=line_pre(i,j)*
-     + 10**interpolate(n_lu_temp,log_lu_temp,n_lu_xi,
-     + log_lu_xi,line_c_lu,lt,lxi,delta,'done',i_ind,j_ind)
-	c_comp(i,j)=comp_c_pre(i,j)*
-     + 10**interpolate(n_lu_temp,log_lu_temp,n_lu_xi,
-     + log_lu_xi,comp_c_lu,lt,lxi,delta,'done',i_ind,j_ind)
-	h_comp(i,j)=comp_h_pre(i,j)*
-     + 10**interpolate(n_lu_temp,log_lu_temp,n_lu_xi,
-     + log_lu_xi,comp_h_lu,lt,lxi,delta,'done',i_ind,j_ind)
-	c_brem(i,j)=brem_pre(i,j)*
-     + 10**interpolate(n_lu_temp,log_lu_temp,n_lu_xi,
-     + log_lu_xi,brem_c_lu,lt,lxi,delta,'done',i_ind,j_ind)
-	h_xray(i,j)=xray_pre(i,j)*
-     + 10**interpolate(n_lu_temp,log_lu_temp,n_lu_xi,
-     + log_lu_xi,xray_h_lu,lt,lxi,delta,'done',i_ind,j_ind)
-	 
-	 heat_tot(i,j)=(h_comp(i,j)*ne+h_xray(i,j)*nh)*nh
-	 cool_tot(i,j)=(c_line(i,j)-c_brem(i,j)-c_comp(i,j))*ne*nh
-	 
-	 hc_tot=(h_comp(i,j)*ne+h_xray(i,j)*nh-c_line(i,j)*ne-
-     +c_brem(i,j)*ne-c_comp(i,j)*ne)*nh
-	  
-	 heatcool=hc_tot
-c 	print *,lxi,lt,hc_tot,h_comp(i,j),interpolate(n_lu_temp,
-c     + log_lu_temp,
-c     + n_lu_xi,log_lu_xi,comp_h_lu,lt,lxi,delta)*ne*nh
-	 
-
-
- 	endif
-	
-	if (mode.eq.3) then
-		st=sqrt(temp)
+	st=sqrt(temp)
 	
 	h_comp(i,j)=comp_h_pre(i,j)*8.9e-36*xi0*tx
 	c_comp(i,j)=comp_c_pre(i,j)*8.9e-36*xi0*(4.0*temp)
 	
 	h_xray(i,j)=xray_pre(i,j)*1.5e-21*(sqsqxi/st)*(1-(temp/tx))
 	
-c	l_l=line_pre(i,j)*(1.7e-18*exp(-1.3e5/temp)/(xi0*st)+1e-24)*ne*nh
+	l_l=line_pre(i,j)*(1.7e-18*exp(-1.3e5/temp)/(xi0*st)+1e-24)
 
-	l_l=1.0e-16*exp(-1.3e5/temp)/(sqrt(xi0)*temp)
-	l_l=l_l+min(5e-27*st,1.5e-17/temp,1e-24)
-	l_l=l_l*line_pre(i,j)
+
 	
 	
 	
@@ -288,13 +152,12 @@ c	l_l=line_pre(i,j)*(1.7e-18*exp(-1.3e5/temp)/(xi0*st)+1e-24)*ne*nh
 	
 	hc_tot=(gamma_comp*ne+gamma_x*nh-l_b*ne-l_l*ne)*nh
 	
-	heat_tot(i,j)=(h_comp(i,j)*ne+h_xray(i,j)*nh)*nh
+	heat_tot(i,j)=(h_comp(i,j)*ne+h_xray(i,j)*ne)*nh
 	cool_tot(i,j)=(c_line(i,j)-c_brem(i,j)-c_comp(i,j))*ne*nh
 	
 	
 	heatcool=hc_tot
 
-	endif
 	
 	
 
@@ -317,7 +180,7 @@ c	l_l=line_pre(i,j)*(1.7e-18*exp(-1.3e5/temp)/(xi0*st)+1e-24)*ne*nh
 #include "diskw.h"
 	REAL rho,xi0,e_0,t_0,temp,heatcool,hc_0,logxi,sqsqxi,n,nh,ne
 	INTEGER i,j,mode,j_ind
-	common /hc_data/ xi0,e_0,hc_0,sqsqxi,n,i,j,nh,ne,mode,j_ind
+	common /hc_data/ xi0,e_0,hc_0,sqsqxi,n,i,j,nh,ne
 	external heatcool
 	zfunc=(1.5*temp*n*boltz)-e_0-
      &  dt*(hc_0+heatcool(temp))/2.0
@@ -327,7 +190,6 @@ c	l_l=line_pre(i,j)*(1.7e-18*exp(-1.3e5/temp)/(xi0*st)+1e-24)*ne*nh
 
 	  
 	  subroutine hc_file_input()
-  	  	use interpolation
               
               implicit none
 #include "cons.h"
@@ -352,7 +214,7 @@ c	l_l=line_pre(i,j)*(1.7e-18*exp(-1.3e5/temp)/(xi0*st)+1e-24)*ne*nh
 	 integer pre_limit,pre_limit_tmp,mode
 	 REAL heatcool,junk,n2,ne_rat
 	 REAL xi0,e_0,hc_0,sqsqxi
- 	common /hc_data/ xi0,e_0,hc_0,sqsqxi,n2,ir,jt,nh,ne,mode,j_ind
+ 	common /hc_data/ xi0,e_0,hc_0,sqsqxi,n2,ir,jt,nh,ne
 	 
 	 
 	 pre_limit_tmp=0
@@ -414,24 +276,10 @@ c	l_l=line_pre(i,j)*(1.7e-18*exp(-1.3e5/temp)/(xi0*st)+1e-24)*ne*nh
 	brem_old=c_brem(ir,jt)
       
 		
-c This is a test - recompute the heating and cooling rates for the temperature that python used!
 
 		xi0=xi(ir,jt)
 		sqsqxi=sqrt(sqrt(xi0))
             
-            
-c set hc_mode to 3 - this is default, blondin	
-      	mode=3 
-c if we have split heatcool files, then use these - mode 1
-      	if (split_heatcool) then
-      		j_ind=binarysearch(n_lu_xi, lu_xi, xi0)
-      	      mode=1
-      	  endif
-c if we have individial heatcool files for each mechanism - mode
-      	  if (indiv_heatcool) then
-            	j_ind=binarysearch(n_lu_xi, lu_xi, xi0)
-            	mode=2
-            endif
 
 	   
          junk=heatcool(py_temp)  
